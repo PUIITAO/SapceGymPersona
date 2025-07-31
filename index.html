@@ -1,0 +1,1466 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>แดชบอร์ดวิเคราะห์ข้อมูลสมาชิก Spacegym</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Harmony -->
+    <!-- Application Structure Plan: A single-page dashboard design provides a comprehensive overview, flowing from key metrics to thematic sections (Demographics, Health, Lifestyle). A global trainer filter enables dynamic segmentation. Interactive chart drill-downs reveal raw member data in a modal, linking aggregated views to source data for transparency. This version includes full CRUD (Create, Read, Update, Delete) functionality with real-time data updates via Firestore. Users can add new members manually or via Vision AI image upload, and now, edit existing member profiles directly from the detail modal. Initial data from a simulated 134-page dataset is pre-populated into Firestore upon first run, with all data points consolidated according to user-defined mapping rules. -->
+    <!-- Visualization & Content Choices: Key metrics are in prominent cards. Demographics (Age, Gender, Marital Status, Children, Address) use Bar/Donut charts for comparison. Goals, Pain Points, Occupations, and Hotspots use Horizontal Bar charts for readability. All visualizations are interactive (hover, click-to-detail modal) and powered by Chart.js on Canvas. Textual context introduces each section. This combination of visual, textual, and AI-powered interactive elements ensures clarity, engagement, and efficient data management with standardized data. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Kanit', sans-serif;
+            background-color: #F8F7F4;
+            color: #4A4A4A;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 300px;
+            }
+        }
+        .main-title {
+            color: #2c3e50;
+        }
+        .card {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+        }
+        .nav-button {
+            background-color: #ffffff;
+            color: #3498db;
+            border: 1px solid #3498db;
+            transition: all 0.3s ease;
+        }
+        .nav-button:hover {
+            background-color: #3498db;
+            color: #ffffff;
+        }
+        .filter-select {
+            background-color: #ffffff;
+            border: 1px solid #bdc3c7;
+            color: #2c3e50;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        .modal-overlay.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .modal-content {
+            background-color: #ffffff;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+            width: 90%;
+            max-width: 1000px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+            transform: translateY(20px);
+            transition: transform 0.3s ease;
+        }
+        .modal-overlay.show .modal-content {
+            transform: translateY(0);
+        }
+        .modal-close-button {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: #888;
+        }
+        .member-profile-card {
+            background-color: #f0f4f8;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        .member-profile-card p {
+            margin-bottom: 0.5rem;
+        }
+        .member-profile-card p strong {
+            color: #333;
+        }
+        canvas {
+            cursor: pointer;
+        }
+        .btn-primary {
+            background-color: #3498db;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-color: #2980b9;
+        }
+        .btn-secondary {
+            background-color: #ecf0f1;
+            color: #2c3e50;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            transition: background-color 0.3s ease;
+        }
+        .btn-secondary:hover {
+            background-color: #bdc3c7;
+        }
+        .form-input {
+            border: 1px solid #bdc3c7;
+            padding: 0.5rem;
+            border-radius: 4px;
+            width: 100%;
+        }
+        .form-label {
+            font-weight: 500;
+            margin-bottom: 0.25rem;
+            display: block;
+        }
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-left-color: #3498db;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .status-message {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            border-radius: 8px;
+            background-color: #d1e7dd;
+            color: #0f5132;
+            border: 1px solid #badbcc;
+            display: none; /* Hidden by default */
+        }
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <header class="bg-white shadow-sm py-4 sticky top-0 z-10">
+        <div class="container mx-auto px-6 flex justify-between items-center">
+            <h1 class="text-2xl md:text-3xl font-bold main-title">Spacegym Member Insights</h1>
+            <div class="hidden md:flex space-x-2">
+                <a href="#overview" class="nav-button font-semibold py-2 px-4 rounded-lg text-sm">ภาพรวม</a>
+                <a href="#demographics" class="nav-button font-semibold py-2 px-4 rounded-lg text-sm">ข้อมูลประชากร</a>
+                <a href="#health" class="nav-button font-semibold py-2 px-4 rounded-lg text-sm">สุขภาพและเป้าหมาย</a>
+                <a href="#lifestyle" class="nav-button font-semibold py-2 px-4 rounded-lg text-sm">ไลฟ์สไตล์</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto p-4 md:p-8">
+        <section class="text-center mb-12">
+            <h2 class="text-3xl font-bold mb-2">แดชบอร์ดวิเคราะห์ข้อมูลสมาชิก</h2>
+            <p class="text-lg text-gray-600 max-w-3xl mx-auto">สำรวจข้อมูลเชิงลึกของสมาชิก Spacegym เพื่อทำความเข้าใจลักษณะโดยรวม เป้าหมาย และความท้าทายผ่านข้อมูลสรุปและแผนภูมิเชิงโต้ตอบ</p>
+            <div class="mt-6 flex flex-col md:flex-row justify-center items-center space-y-4 md:space-y-0 md:space-x-4">
+                <label for="trainer-filter" class="font-semibold mr-2">กรองข้อมูลตามเทรนเนอร์:</label>
+                <select id="trainer-filter" class="filter-select rounded-lg p-2">
+                    <option value="All">เทรนเนอร์ทั้งหมด</option>
+                </select>
+                <button onclick="openAddMemberModal()" class="btn-primary ml-4">เพิ่มสมาชิกใหม่</button>
+                <button onclick="openUploadImageModal()" class="btn-primary ml-4">เพิ่มข้อมูลจากรูปภาพ</button>
+            </div>
+            <p id="user-id-display" class="text-sm text-gray-500 mt-4">User ID: Loading...</p>
+            <div id="statusMessage" class="status-message"></div>
+        </section>
+
+        <section id="overview" class="mb-12">
+             <h3 class="text-2xl font-bold mb-6 text-center">ภาพรวมข้อมูลสำคัญ</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="card p-6 text-center">
+                    <h4 class="text-lg font-semibold text-gray-500">จำนวนข้อมูลที่วิเคราะห์</h4>
+                    <p id="total-members" class="text-4xl font-bold text-blue-500 mt-2">--<sup class="text-sm">[1]</sup></p>
+                </div>
+                <div class="card p-6 text-center">
+                    <h4 class="text-lg font-semibold text-gray-500">อายุเฉลี่ย</h4>
+                    <p id="avg-age" class="text-4xl font-bold text-green-500 mt-2">--</p>
+                </div>
+                <div class="card p-6 text-center">
+                    <h4 class="text-lg font-semibold text-gray-500">Goal</h4>
+                    <p id="top-goal" class="text-2xl md:text-3xl font-bold text-purple-500 mt-2">--</p>
+                </div>
+                <div class="card p-6 text-center">
+                    <h4 class="text-lg font-semibold text-gray-500">Pain Point</h4>
+                    <p id="top-pain-point" class="text-2xl md:text-3xl font-bold text-red-500 mt-2">--</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="demographics" class="mb-12">
+            <h3 class="text-2xl font-bold mb-2 text-center">เราคือใคร: ภาพรวมข้อมูลประชากร</h3>
+            <p class="text-md text-gray-600 max-w-3xl mx-auto text-center mb-8">ทำความเข้าใจลักษณะทางประชากรของสมาชิก ตั้งแต่ช่วงอายุ เพศ ไปจนถึงสถานะทางเศรษฐกิจและสังคม เพื่อให้เห็นภาพรวมของกลุ่มลูกค้าหลัก</p>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">การกระจายตัวของอายุ</h4>
+                    <div class="chart-container">
+                        <canvas id="ageChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">เพศ</h4>
+                    <div class="chart-container">
+                        <canvas id="genderChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">สถานภาพสมรส</h4>
+                     <div class="chart-container">
+                        <canvas id="maritalStatusChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">บุตร</h4>
+                     <div class="chart-container">
+                        <canvas id="childrenChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">ช่วงรายได้ของสมาชิก</h4>
+                     <div class="chart-container">
+                        <canvas id="incomeChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">อาชีพหลักของสมาชิก</h4>
+                     <div class="chart-container">
+                        <canvas id="occupationChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-6 lg:col-span-2">
+                    <h4 class="font-semibold text-center mb-4">ระยะทางจากที่อยู่</h4>
+                     <div class="chart-container">
+                        <canvas id="addressChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="health" class="mb-12">
+            <h3 class="text-2xl font-bold mb-2 text-center">สุขภาพและเป้าหมายการออกกำลังกาย</h3>
+            <p class="text-md text-gray-600 max-w-3xl mx-auto text-center mb-8">เจาะลึกถึงแรงจูงใจในการออกกำลังกายของสมาชิก พื้นที่ที่ต้องการเน้นเป็นพิเศษ และความท้าทายด้านสุขภาพที่พวกเขาเผชิญ</p>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">Goal</h4>
+                    <div class="chart-container">
+                        <canvas id="goalsChart"></canvas>
+                    </div>
+                </div>
+                 <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">จุดที่ต้องการเน้นเป็นพิเศษ (Hot Spot)</h4>
+                    <div class="chart-container">
+                        <canvas id="hotspotChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-6 lg:col-span-2">
+                    <h4 class="font-semibold text-center mb-4">Pain Point</h4>
+                     <div class="chart-container">
+                        <canvas id="painPointsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="lifestyle" class="mb-12">
+            <h3 class="text-2xl font-bold mb-2 text-center">ไลฟ์สไตล์และพฤติกรรม</h3>
+             <p class="text-md text-gray-600 max-w-3xl mx-auto text-center mb-8">สำรวจความสนใจ งานอดิเรก และการกระจายตัวของสมาชิกภายใต้การดูแลของเทรนเนอร์แต่ละคน เพื่อให้เห็นภาพรวมของวิถีชีวิตนอกยิม</p>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">ความสนใจและงานอดิเรกยอดนิยม</h4>
+                    <div class="chart-container">
+                        <canvas id="hobbiesChart"></canvas>
+                    </div>
+                </div>
+                <div class="card p-6">
+                    <h4 class="font-semibold text-center mb-4">การกระจายตัวของสมาชิกตามเทรนเนอร์</h4>
+                    <div class="chart-container">
+                        <canvas id="trainerChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="references" class="mb-12">
+            <h3 class="text-2xl font-bold mb-2 text-center">แหล่งอ้างอิงและขอบเขตข้อมูล</h3>
+            <p class="text-md text-gray-600 max-w-3xl mx-auto text-center">
+                [1] ข้อมูลที่ใช้ในการวิเคราะห์และนำเสนอในแดชบอร์ดนี้มาจากเอกสาร "Member Persona Spacegym.pdf" ซึ่งมีจำนวน 134 หน้า 
+            </p>
+        </section>
+    </main>
+
+    <footer class="bg-white mt-12 py-6">
+        <div class="container mx-auto text-center text-gray-500">
+            <p>&copy; 2024 Spacegym Member Analysis. จัดทำขึ้นเพื่อการวิเคราะห์ข้อมูล</p>
+        </div>
+    </footer>
+
+    <!-- Modal for displaying member details -->
+    <div id="memberDetailModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-button" onclick="closeMemberDetailModal()">&times;</button>
+            <h3 class="text-xl font-bold mb-4">ข้อมูลสมาชิก</h3>
+            <div id="memberDetailContent" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Member profiles will be loaded here -->
+            </div>
+            <div class="mt-6 flex justify-end space-x-4">
+                <button id="editMemberButton" class="btn-primary">แก้ไขข้อมูลสมาชิก</button>
+                <button id="deleteMemberButton" class="btn-secondary bg-red-500 hover:bg-red-600 text-white">ลบสมาชิก</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for adding/editing new member -->
+    <div id="addEditMemberModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-button" onclick="closeAddEditMemberModal()">&times;</button>
+            <h3 id="addEditModalTitle" class="text-xl font-bold mb-4">เพิ่มสมาชิกใหม่</h3>
+            <form id="addEditMemberForm" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input type="hidden" id="memberIdToEdit">
+                <div>
+                    <label for="memberName" class="form-label">ชื่อ:</label>
+                    <input type="text" id="memberName" class="form-input" required>
+                </div>
+                <div>
+                    <label for="memberTrainer" class="form-label">เทรนเนอร์:</label>
+                    <input type="text" id="memberTrainer" class="form-input" required>
+                </div>
+                <div>
+                    <label for="memberAge" class="form-label">อายุ:</label>
+                    <input type="number" id="memberAge" class="form-input" required>
+                </div>
+                <div>
+                    <label for="memberGender" class="form-label">เพศ:</label>
+                    <select id="memberGender" class="form-input" required>
+                        <option value="">เลือก</option>
+                        <option value="ชาย">ชาย</option>
+                        <option value="หญิง">หญิง</option>
+                        <option value="อื่นๆ">อื่นๆ</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="memberIncome" class="form-label">ช่วงรายได้:</label>
+                    <select id="memberIncome" class="form-input" required>
+                        <option value="">เลือก</option>
+                        <option value="<50k">< 50k</option>
+                        <option value="50k-100k">50k-100k</option>
+                        <option value="100k-150k">100k-150k</option>
+                        <option value=">150k">> 150k</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="memberOccupation" class="form-label">อาชีพ:</label>
+                    <input type="text" id="memberOccupation" class="form-input" required>
+                </div>
+                <div>
+                    <label for="memberGoals" class="form-label">Goal (คั่นด้วยคอมมา):</label>
+                    <input type="text" id="memberGoals" class="form-input" placeholder="เช่น ลดไขมัน, สร้างกล้ามเนื้อ">
+                </div>
+                <div>
+                    <label for="memberHotspots" class="form-label">จุดที่เน้น (คั่นด้วยคอมมา):</label>
+                    <input type="text" id="memberHotspots" class="form-input" placeholder="เช่น หน้าท้อง, ทั่วร่างกาย">
+                </div>
+                <div>
+                    <label for="memberPainPoints" class="form-label">Pain Point (คั่นด้วยคอมมา):</label>
+                    <input type="text" id="memberPainPoints" class="form-input" placeholder="เช่น Office Syndrome, ปวดหลัง">
+                </div>
+                <div>
+                    <label for="memberHobbies" class="form-label">งานอดิเรก (คั่นด้วยคอมมา):</label>
+                    <input type="text" id="memberHobbies" class="form-input" placeholder="เช่น การเดินทาง, กีฬา">
+                </div>
+                <div>
+                    <label for="memberMaritalStatus" class="form-label">สถานภาพสมรส:</label>
+                    <select id="memberMaritalStatus" class="form-input">
+                        <option value="">เลือก</option>
+                        <option value="สมรส">สมรส</option>
+                        <option value="โสด">โสด</option>
+                        <option value="หย่าร้าง">หย่าร้าง</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="memberChildren" class="form-label">บุตร:</label>
+                    <select id="memberChildren" class="form-input">
+                        <option value="">เลือก</option>
+                        <option value="มี">มี</option>
+                        <option value="ไม่มี">ไม่มี</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="memberAddress" class="form-label">ระยะทางจากที่อยู่:</label>
+                    <select id="memberAddress" class="form-input">
+                        <option value="">เลือก</option>
+                        <option value="Within 5 km">ภายใน 5 กม.</option>
+                        <option value="Within 10 km">ภายใน 10 กม.</option>
+                        <option value="Far than 10 km">ไกลกว่า 10 กม.</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2 text-center mt-4">
+                    <button type="submit" id="addEditSubmitButton" class="btn-primary">
+                        <span id="addEditLoading" class="hidden loading-spinner"></span>
+                        บันทึกข้อมูลสมาชิก
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal for Image Upload -->
+    <div id="uploadImageModal" class="modal-overlay">
+        <div class="modal-content">
+            <button class="modal-close-button" onclick="closeUploadImageModal()">&times;</button>
+            <h3 class="text-xl font-bold mb-4">เพิ่มข้อมูลสมาชิกจากรูปภาพ</h3>
+            <p class="text-sm text-gray-600 mb-4">อัปโหลดรูปภาพแบบฟอร์มสมาชิก (เช่น รูปที่ถ่ายจาก PDF) เพื่อดึงข้อมูลอัตโนมัติ</p>
+            <input type="file" id="imageUploadInput" accept="image/*" class="form-input mb-4">
+            <button onclick="processImage()" class="btn-primary w-full">
+                <span id="processImageLoading" class="hidden loading-spinner"></span>
+                ประมวลผลรูปภาพ
+            </button>
+            <div id="imageProcessStatus" class="status-message hidden mt-4"></div>
+            <div id="extractedDataPreview" class="mt-6 p-4 bg-gray-100 rounded-lg hidden">
+                <h4 class="font-semibold mb-2">ข้อมูลที่ดึงได้ (ตรวจสอบก่อนเพิ่ม):</h4>
+                <pre id="extractedJson" class="text-xs overflow-auto max-h-48"></pre>
+                <button onclick="fillFormWithExtractedData()" class="btn-primary w-full mt-4">กรอกข้อมูลลงฟอร์ม</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables provided by Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        const API_KEY = ""; // Canvas will inject the API key at runtime
+
+        let db;
+        let auth;
+        let currentUserId = null;
+        let membersCollectionRef;
+        let allMemberData = []; // This will hold the real-time data from Firestore
+        let charts = {};
+        let currentFilter = 'All';
+        let extractedMemberData = null; // To store data extracted from image
+        let currentMemberIdForEdit = null; // To store the ID of the member being edited
+
+        const chartColors = {
+            blue: 'rgba(52, 152, 219, 0.7)',
+            green: 'rgba(46, 204, 113, 0.7)',
+            purple: 'rgba(155, 89, 182, 0.7)',
+            red: 'rgba(231, 76, 60, 0.7)',
+            orange: 'rgba(230, 126, 34, 0.7)',
+            yellow: 'rgba(241, 196, 15, 0.7)',
+            grey: 'rgba(149, 165, 166, 0.7)',
+            darkBlue: 'rgba(44, 62, 80, 0.7)',
+        };
+
+        const chartHoverColors = {
+            blue: 'rgba(52, 152, 219, 1)',
+            green: 'rgba(46, 204, 113, 1)',
+            purple: 'rgba(155, 89, 182, 1)',
+            red: 'rgba(231, 76, 60, 1)',
+            orange: 'rgba(230, 126, 34, 1)',
+            yellow: 'rgba(241, 196, 15, 1)',
+            grey: 'rgba(149, 165, 166, 1)',
+            darkBlue: 'rgba(44, 62, 80, 1)',
+        };
+
+        // Mapping rules for data consolidation
+        const MAPPING_RULES = {
+            gender: {
+                'Male': 'ชาย', 'M': 'ชาย', 'เพศชาย': 'ชาย', 'ชาย': 'ชาย', 'male': 'ชาย', 'MALE': 'ชาย',
+                'Female': 'หญิง', 'F': 'หญิง', 'เพศหญิง': 'หญิง', 'หญิง': 'หญิง', 'Femple': 'หญิง', 'Temale-': 'หญิง',
+                'Other': 'อื่นๆ', 'อื่นๆ': 'อื่นๆ'
+            },
+            maritalStatus: {
+                'Married': 'สมรส', 'มีครอบครัว': 'สมรส', 'แต่งงาน': 'สมรส', 'แต่งงานแล้ว': 'สมรส', 'Relationship': 'สมรส', 'l,il': 'สมรส', 'Marsled': 'สมรส', 'ครอไว': 'สมรส',
+                'Single': 'โสด', 'โสด': 'โสด', 'SINGLE': 'โสด',
+                'หย่าร้าง': 'หย่าร้าง',
+                '-': null // Map explicit '-' to null for consistency, will be 'ไม่ระบุ' in UI
+            },
+            children: {
+                'มีลูก': 'มี', '1-2': 'มี', 'มีลูก 2 คน': 'มี', 'Yes': 'มี', '2': 'มี', '20': 'มี', '3': 'มี', // Assuming 2, 20, 3 are counts implying 'มี'
+                'No': 'ไม่มี', '-': 'ไม่มี', 'ไม่มี': 'ไม่มี'
+            },
+            occupation: {
+                'Employee': 'พนักงานบริษัท/ลูกจ้าง', 'พนักงาน': 'พนักงานบริษัท/ลูกจ้าง', 'พนักงานเงินเดือน': 'พนักงานบริษัท/ลูกจ้าง', 'พนักงานเอกชน': 'พนักงานบริษัท/ลูกจ้าง', 'บริษัทเอกชน': 'พนักงานบริษัท/ลูกจ้าง', 'HR': 'พนักงานบริษัท/ลูกจ้าง',
+                'Self-employed': 'เจ้าของธุรกิจ/ผู้บริหาร', 'Business Owner': 'เจ้าของธุรกิจ/ผู้บริหาร', 'CEO': 'เจ้าของธุรกิจ/ผู้บริหาร', 'ผู้บริหาร': 'เจ้าของธุรกิจ/ผู้บริหาร', 'Ceo': 'เจ้าของธุรกิจ/ผู้บริหาร', 'เจ้าของบริษัท': 'เจ้าของธุรกิจ/ผู้บริหาร',
+                'แพทย์': 'แพทย์/ศัลยแพทย์', 'ศัลยแพทย์': 'แพทย์/ศัลยแพทย์',
+                'นักศึกษา': 'นักศึกษา', 'student': 'นักศึกษา',
+                'แม่บ้าน': 'แม่บ้าน',
+                'ว่างงาน': 'ว่างงาน', 'หางาน': 'ว่างงาน',
+                'อื่นๆ': 'อื่นๆ', 'Instructor': 'อื่นๆ', 'ผู้ช่วย สส.': 'อื่นๆ', 'เจ้าหน้าที่กำกับดูแลปฏิบัติงาน': 'อื่นๆ', 'Other: เกี่ยวก้มตอม + AI': 'อื่นๆ', 'Consultant': 'อื่นๆ', 'ที่ปรึกษา/การตลาด': 'อื่นๆ', 'Marketing': 'อื่นๆ', 'Marketing/Consultant': 'อื่นๆ'
+            },
+            goals: {
+                'ลดน้ำหนัก/ลดไขมัน': 'ลดน้ำหนัก/ลดไขมัน', 'ลดน้ำหนัก': 'ลดน้ำหนัก/ลดไขมัน', 'ลดน้ำหนัก 10 กก.': 'ลดน้ำหนัก/ลดไขมัน', 'ลด 20 KG.': 'ลดน้ำหนัก/ลดไขมัน', 'ลดนน. 10 กก.': 'ลดน้ำหนัก/ลดไขมัน', 'ลดน้ำหนักทุกสวนของรางกาย': 'ลดน้ำหนัก/ลดไขมัน', 'ลดน้าหนัก': 'ลดน้ำหนัก/ลดไขมัน', 'ลด หนัก': 'ลดน้ำหนัก/ลดไขมัน', 'พน 3-4kg': 'ลดน้ำหนัก/ลดไขมัน', 'ลดน้ำหนัก+สุขภาพแข็งแรง': 'ลดน้ำหนัก/ลดไขมัน', 'ใน 20 KG.': 'ลดน้ำหนัก/ลดไขมัน', 'ลดน้ำหนักและไขมัน': 'ลดน้ำหนัก/ลดไขมัน', 'ลดไหม้น': 'ลดน้ำหนัก/ลดไขมัน', 'ลด ห': 'ลดน้ำหนัก/ลดไขมัน', 'Fot Loss.': 'ลดน้ำหนัก/ลดไขมัน', 'Fat Less': 'ลดน้ำหนัก/ลดไขมัน', 'Fat Jooss': 'ลดน้ำหนัก/ลดไขมัน', 'Fat Loss': 'ลดน้ำหนัก/ลดไขมัน', 'ลดไขมัน': 'ลดน้ำหนัก/ลดไขมัน', 'ลดพุง': 'ลดน้ำหนัก/ลดไขมัน',
+                'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'สร้างกล้ามเนื้อ': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เพิ่มกล้ามเนื้อ': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'Increase Muscle': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'Gaim mascle mass': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'strength': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'streng': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เพิ่มควายแรง': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เสริมสร้างกล้ามเนื้อ': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เพิ่มกลามเนื้อ': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เพิ่มกล้ามเนี': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'สร้างกล้ามเนี': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เพิ่มกล้ามมาหัว': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เพิ่มกล้ามเนื้': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'สร้างคน': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'สร้างกล้ามาหัว': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'สร้างกล้ามเนื้': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'สร้าง มา': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เพิ่มกล้ามา 1': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เสริมสร้าง กน': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เสริมสร้าง คาน': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'ร่างกายพลัง': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'เพิ่มกน': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'สรางกลามเนื้อ': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'แข้งแรง': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง', 'แข็งแรง': 'สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง',
+                'กระชับสัดส่วน': 'กระชับสัดส่วน', 'เฟิร์มหุ่น': 'กระชับสัดส่วน', 'Maintain หุ่น': 'กระชับสัดส่วน', 'กระชับ': 'กระชับสัดส่วน', 'กระชับสัดสวน': 'กระชับสัดส่วน', 'กระชับหน้าท้อง': 'กระชับสัดส่วน', 'กระชับสัดสวน หนาทอง สะโพก': 'กระชับสัดส่วน',
+                'สุขภาพแข็งแรง': 'สุขภาพแข็งแรง', 'สุขภาพ': 'สุขภาพแข็งแรง', 'สุขภาพดี': 'สุขภาพแข็งแรง', 'สุขภาพแข็งแรงขึ้น': 'สุขภาพแข็งแรง', 'สุขภาพดีลดไขมัน': 'สุขภาพแข็งแรง', 'สุขภาพดี': 'สุขภาพแข็งแรง', 'สุขภาพแข็ง 189': 'สุขภาพแข็งแรง', 'เน้นสุขภาพแข็งแรง': 'สุขภาพแข็งแรง',
+                'เพิ่มไขมัน': 'เพิ่มไขมัน',
+                'อื่นๆ': 'อื่นๆ' // Catch-all for unclear goals
+            },
+            hotspots: {
+                'หน้าท้อง/แกนกลาง': 'หน้าท้อง/แกนกลาง', 'หน้าท้อง': 'หน้าท้อง/แกนกลาง', 'พุง': 'หน้าท้อง/แกนกลาง', 'Abdomen': 'หน้าท้อง/แกนกลาง', 'Abs.': 'หน้าท้อง/แกนกลาง', 'ท้อง': 'หน้าท้อง/แกนกลาง', 'หนาทอง': 'หน้าท้อง/แกนกลาง', 'Core': 'หน้าท้อง/แกนกลาง', 'Core body': 'หน้าท้อง/แกนกลาง', 'แกนกลางลำตัว': 'หน้าท้อง/แกนกลาง', 'อยากลดช่วงหน้าท้องคว': 'หน้าท้อง/แกนกลาง', 'อยากสร้างความกระชับของ กล้ามเนื้อตรงบริเวณหน้าท้อง': 'หน้าท้อง/แกนกลาง', 'เน้นช่วงหน้าท้อง': 'หน้าท้อง/แกนกลาง', 'เน้นเพิ่มกล้ามเนื้อตรงช่วงหน้าท้อง': 'หน้าท้อง/แกนกลาง', 'อยากลดหน้าท้องให้ได้เยอะๆ': 'หน้าท้อง/แกนกลาง', 'อยากลดไขมันตรงช่วงหน้าท้อง': 'หน้าท้อง/แกนกลาง', 'อยากลดไขมันตรงหน้าท้องมากที่สุด': 'หน้าท้อง/แกนกลาง', 'เป็นช่างหน้าท้อง': 'หน้าท้อง/แกนกลาง',
+                'ทั่วร่างกาย': 'ทั่วร่างกาย', 'Full Body': 'ทั่วร่างกาย', 'full body': 'ทั่วร่างกาย', 'Full body.': 'ทั่วร่างกาย', 'Fullbody.': 'ทั่วร่างกาย', 'ALL Body': 'ทั่วร่างกาย', 'ทุกส่วนของร่างกาย': 'ทั่วร่างกาย', 'ทุกสวนของรางกาย': 'ทั่วร่างกาย', 'All': 'ทั่วร่างกาย',
+                'หลัง': 'หลัง', 'Back': 'หลัง', 'Lower Back': 'หลัง', 'Upper Back': 'หลัง',
+                'แขน/ไหล่': 'แขน/ไหล่', 'แขน': 'แขน/ไหล่', 'ต้นแขน': 'แขน/ไหล่', 'Arms': 'แขน/ไหล่', 'ไหล่': 'แขน/ไหล่', 'บ่า': 'แขน/ไหล่', 'สะบัก': 'แขน/ไหล่', 'คอบ่าไหล่': 'แขน/ไหล่',
+                'ขา/สะโพก': 'ขา/สะโพก', 'ขา': 'ขา/สะโพก', 'Legs': 'ขา/สะโพก', 'สะโพก': 'ขา/สะโพก', 'Hips': 'ขา/สะโพก',
+                'หน้าอก': 'หน้าอก', 'Chest': 'หน้าอก', 'อก': 'หน้าอก', 'เน้นช่วงหน้าอก เป็นหลัก': 'หน้าอก',
+                'อื่นๆ': 'อื่นๆ' // Catch-all for unclear hotspots
+            },
+            painPoints: {
+                'ปวดเข่า/ข้อต่อ': 'ปวดเข่า/ข้อต่อ', 'knee': 'ปวดเข่า/ข้อต่อ', 'ปวดข้อเข่าเล็กน้อย': 'ปวดเข่า/ข้อต่อ', 'เจ็บเข่า': 'ปวดเข่า/ข้อต่อ', 'ข้อต่อ': 'ปวดเข่า/ข้อต่อ', 'ปวดข้อเท้า': 'ปวดเข่า/ข้อต่อ', 'เข่า': 'ปวดเข่า/ข้อต่อ', 'ปวดเข่าด้านหน้า': 'ปวดเข่า/ข้อต่อ', 'มีอาการปวดตามข้อเท้าข้อเข่า': 'ปวดเข่า/ข้อต่อ', 'ปวดข้อ': 'ปวดเข่า/ข้อต่อ', 'เจ็บเข่าทั้ง 2 ข้าง': 'ปวดเข่า/ข้อต่อ', 'เอ็นเข่า เจ็บข้างขวา': 'ปวดเข่า/ข้อต่อ', 'เคยผ่าเข่าซ้าย': 'ปวดเข่า/ข้อต่อ', 'บาดเจ็บที่เข่า': 'ปวดเข่า/ข้อต่อ', 'เอ็นเข่าเจ็บ': 'ปวดเข่า/ข้อต่อ', 'เข่าเสื่อมข้างขวา': 'ปวดเข่า/ข้อต่อ', 'หมอนรองหัวเข่า': 'ปวดเข่า/ข้อต่อ', 'บาดเจ็บที่หัวเข่า': 'ปวดเข่า/ข้อต่อ',
+                'ปวดกล้ามเนื้อ': 'ปวดกล้ามเนื้อ', 'ปวดกล้ามเนื้อบ่อยๆ': 'ปวดกล้ามเนื้อ', 'เป็นหมาย พิมกล้ามเน้อ': 'ปวดกล้ามเนื้อ', 'เป็นกล้ามเขื่อน นั่งนานๆ หน้าจะปวด': 'ปวดกล้ามเนื้อ', 'ตึงกล้ามเนื้อแขนด้านหลัง': 'ปวดกล้ามเนื้อ', 'บาดเจ็บกล้ามเนื้อต้นคอ': 'ปวดกล้ามเนื้อ', 'ปวดเมื่อย': 'ปวดกล้ามเนื้อ',
+                'ออฟฟิศซินโดรม/ปวดหลัง': 'ออฟฟิศซินโดรม/ปวดหลัง', 'Office Syndrome': 'ออฟฟิศซินโดรม/ปวดหลัง', 'Office syndrome': 'ออฟฟิศซินโดรม/ปวดหลัง', 'office syphan': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ออฟฟิศซินโดรม': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ออฟฟิศ ซินโดรม': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ออฟฟิศ นโดรม': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ปวดหลัง': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ปวดหลังล่าง': 'ออฟฟิศซินโดรม/ปวดหลัง', 'กระดูกทับเส้นประสาท L4,L5 S1': 'ออฟฟิศซินโดรม/ปวดหลัง', 'L4': 'ออฟฟิศซินโดรม/ปวดหลัง', 'L5': 'ออฟฟิศซินโดรม/ปวดหลัง', 'กระดูกทับเส้นประสาท': 'ออฟฟิศซินโดรม/ปวดหลัง', 'เป็นกระดูกสันหลังคด': 'ออฟฟิศซินโดรม/ปวดหลัง', 'หลังค่อม': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ไหล่ห่อ': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ออฟฟิศซินโดรมไหล่ห่อเข้ามา(ทำงานหน้าคอม)': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ปวดบ่าไหล่': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ปวดคอบ่า': 'ออฟฟิศซินโดรม/ปวดหลัง', 'ปวดเอวเวลาบิดตัว': 'ออฟฟิศซินโดรม/ปวดหลัง',
+                'ไม่มีเวลา/ขาดวินัย': 'ไม่มีเวลา/ขาดวินัย', 'ไม่มีเวลา': 'ไม่มีเวลา/ขาดวินัย', 'Time Limit': 'ไม่มีเวลา/ขาดวินัย', 'งานยุ่ง': 'ไม่มีเวลา/ขาดวินัย', 'ไม่มีเวลาว่างเลย': 'ไม่มีเวลา/ขาดวินัย', 'ไม่ค่อยมีเวลา': 'ไม่มีเวลา/ขาดวินัย', 'ขาดวินัย': 'ไม่มีเวลา/ขาดวินัย', 'ไมมีเวลาออกกำลังกาย': 'ไม่มีเวลา/ขาดวินัย', 'งานยุง': 'ไม่มีเวลา/ขาดวินัย', 'เลื่อนนัดบ่อย': 'ไม่มีเวลา/ขาดวินัย', 'ต้องทักถามตลอดเวลาออกกำลังกาย': 'ไม่มีเวลา/ขาดวินัย', 'ถ้าเหนื่อยจะหยุด': 'ไม่มีเวลา/ขาดวินัย', 'ขี้เกียจ': 'ไม่มีเวลา/ขาดวินัย', 'ไม่ชอบออกกำลังกาย': 'ไม่มีเวลา/ขาดวินัย',
+                'เหนื่อยง่าย/ไม่ชอบความเข้มข้น': 'เหนื่อยง่าย/ไม่ชอบความเข้มข้น', 'เหนื่อยง่าย': 'เหนื่อยง่าย/ไม่ชอบความเข้มข้น', 'เหนื่อยง่ายตอนออกกำลังกาย': 'เหนื่อยง่าย/ไม่ชอบความเข้มข้น', 'ไม่ชอบความเข้มข้นสูง': 'เหนื่อยง่าย/ไม่ชอบความเข้มข้น', 'ไม่ฮึด': 'เหนื่อยง่าย/ไม่ชอบความเข้มข้น', 'ไม่ชอบไฟแรงๆ': 'เหนื่อยง่าย/ไม่ชอบความเข้มข้น', 'อ่อนเพลีย': 'เหนื่อยง่าย/ไม่ชอบความเข้มข้น',
+                'ปัญหาเฉพาะส่วน/อื่นๆ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ไขมันช่องท้องสูง': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'visceral fat สูง': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'กล้ามเนื้อน้อย': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'กล้ามเนื้ออ่อนแรง': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ปวดบ่าไหล่': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ปัญหาหัวไหล่': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ข้อไหล่ติด': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ปวดไหล่ด้านซ้าย': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ยกแขนไม่ได้': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'เจ็บหัวไหล่ขวา': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'กระดูกพรุน': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'เอ็นเข่าเจ็บ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'เก๊าท์กำเริบ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'บาดเจ็บกล้ามเนื้อต้นคอ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'เคยผ่าเข่า': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'เจ็บต้นขาด้านใน': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ต้องโฟกัสการเกร็ง': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ไหปลาร้าฝั่งซ้ายใส่เหล็ก': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ไม่กล้ายกเวทหนักๆ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ชอบทำท่าผิด': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ลงน้ำหนักที่หัวเข่า': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'กลั้นหายใจ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ย่อต่ำไม่ได้': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'น้ำหนักตัวเยอะ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ปวดข้อเมื่อยกน้ำหนักเยอะ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'เป็นลมง่าย': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'กลัวเลือด': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'กลัวความสูง': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ป่วยหนัก': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ไม่สนเรื่องน้ำหนัก': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ปวดหัว': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'อาการที่เกิดจากการเล่นกีฬา': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ตั้งใจลดน้ำหนัก': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'หุ่นเฟิร์ม': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ต้องมาออกกำลังกายบ่อยๆ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ผ่าตัดเต้านมข้างซ้าย': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ตึงกล้ามเนื้อแขนด้านหลัง': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ไม่ชอบเล่นท่าแขน': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ไม่ชอบท่า diagonal crunch': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ปวดจากการเดินเยอะ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'กล้ามเนื้อไม่เท่ากัน': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'เคยผ่าตัด': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'เจ็บช่วงไหปลาร้า': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'ทำท่าออกกำลังกายผิด': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'อายุเยอะ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'หลายกิจกรรม': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'โฟกัสท่าที่ถูก': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'การเกร็งกล้ามเนื้อ': 'ปัญหาเฉพาะส่วน/อื่นๆ', 'อื่นๆ': 'อื่นๆ' // Catch-all for unclear pain points
+            },
+            hobbies: {
+                'ท่องเที่ยว': 'ท่องเที่ยว', 'เที่ยวต่างประเทศ': 'ท่องเที่ยว', 'เที่ยว': 'ท่องเที่ยว', 'เดินทางไกล': 'ท่องเที่ยว', 'ท่องเที่ยวต่างประเทศ': 'ท่องเที่ยว', 'ทองเที่ยว': 'ท่องเที่ยว', 'ชอบท่องเที่ยวต่างประเทศ': 'ท่องเที่ยว', 'เที่ยวในและต่างประเทศ': 'ท่องเที่ยว', 'เดินทาง': 'ท่องเที่ยว',
+                'กีฬา/ออกกำลังกาย': 'กีฬา/ออกกำลังกาย', 'กีฬา': 'กีฬา/ออกกำลังกาย', 'เล่นกีฬา': 'กีฬา/ออกกำลังกาย', 'มวย': 'กีฬา/ออกกำลังกาย', 'ตีเทนนิส': 'กีฬา/ออกกำลังกาย', 'วิ่งมาราธอน': 'กีฬา/ออกกำลังกาย', 'วิ่ง': 'กีฬา/ออกกำลังกาย', 'ขับรถ': 'กีฬา/ออกกำลังกาย', 'กอล์ฟ': 'กีฬา/ออกกำลังกาย', 'ปั่นจักรยาน': 'กีฬา/ออกกำลังกาย', 'แบดมินตัน': 'กีฬา/ออกกำลังกาย', 'โยคะ': 'กีฬา/ออกกำลังกาย', 'พิลาทิส': 'กีฬา/ออกกำลังกาย', 'ตีบาส': 'กีฬา/ออกกำลังกาย', 'Bodyweight': 'กีฬา/ออกกำลังกาย', 'ออกกำลังกาย': 'กีฬา/ออกกำลังกาย', 'เล่นไอซฮอกกี้': 'กีฬา/ออกกำลังกาย', 'ตีแบต': 'กีฬา/ออกกำลังกาย', 'วิ่งเทรล': 'กีฬา/ออกกำลังกาย', 'ปนจักรยาน': 'กีฬา/ออกกำลังกาย', 'เล่นเวท': 'กีฬา/ออกกำลังกาย', 'ชอบ Bodyweight': 'กีฬา/ออกกำลังกาย', 'ออกกำลัง': 'กีฬา/ออกกำลังกาย', 'วิง': 'กีฬา/ออกกำลังกาย', 'ตีมวย': 'กีฬา/ออกกำลังกาย',
+                'ใช้เวลากับครอบครัว': 'ใช้เวลากับครอบครัว', 'Family Time': 'ใช้เวลากับครอบครัว', 'อยู่กับครอบครัว': 'ใช้เวลากับครอบครัว', 'เลี้ยงลูก': 'ใช้เวลากับครอบครัว', 'ใช้เวลากับครอบครัว': 'ใช้เวลากับครอบครัว', 'ดูแลลูก': 'ใช้เวลากับครอบครัว', 'รับส่ง ลูกเรีชนพิเศษ': 'ใช้เวลากับครอบครัว', 'รับสั่งเรียนพิเศษ': 'ใช้เวลากับครอบครัว',
+                'ดูหนัง/อ่านหนังสือ': 'ดูหนัง/อ่านหนังสือ', 'ดูหนัง': 'ดูหนัง/อ่านหนังสือ', 'อ่านหนังสือ': 'ดูหนัง/อ่านหนังสือ', 'ดูคอนเสิร์ต': 'ดูหนัง/อ่านหนังสือ',
+                'สัตว์เลี้ยง': 'สัตว์เลี้ยง', 'สุนัข': 'สัตว์เลี้ยง', 'สัตวเลี้ยง(สุนัข)': 'สัตว์เลี้ยง',
+                'อื่นๆ': 'อื่นๆ' // Catch-all for unclear hobbies
+            },
+            trainer: {
+                'Oy': 'Oy', 'oy': 'Oy',
+                'Gett': 'Gett',
+                'Chin': 'Chin', 'Chian': 'Chin', 'Chinh': 'Chin', 'Chins': 'Chin', 'Chipt': 'Chin', 'Chit': 'Chin', 'Chir': 'Chin',
+                'Fa': 'Fa',
+                'Bentz': 'Bentz', 'Bentz.': 'Bentz', 'B': 'Bentz', 'B.': 'Bentz',
+                'Oat->Oy': 'Oat->Oy', 'Oat-> (Oy)': 'Oat->Oy',
+                'Oat->Fa': 'Oat->Fa', 'Oat>Fa': 'Oat->Fa',
+                'Mewan': 'Mewan', 'Menan': 'Mewan',
+                'HIN': 'HIN',
+                'อื่นๆ': 'อื่นๆ' // Catch-all for unknown trainers
+            }
+        };
+
+        function standardizeValue(value, category) {
+            if (value === null || value === undefined || value === '') return null;
+
+            const rules = MAPPING_RULES[category];
+            if (rules) {
+                // Handle array values (goals, hotspots, painPoints, hobbies)
+                if (Array.isArray(value)) {
+                    return value.map(item => {
+                        const trimmedItem = typeof item === 'string' ? item.trim() : item;
+                        const standardizedItem = rules[trimmedItem];
+                        return standardizedItem !== undefined ? standardizedItem : null; // Map unknown array items to null
+                    }).filter(item => item !== null && item !== 'อื่นๆ'); // Filter out nulls and explicit 'อื่นๆ' from array to avoid redundancy
+                }
+
+                // Handle string values (gender, maritalStatus, children, occupation, trainer)
+                const trimmedValue = typeof value === 'string' ? value.trim() : value;
+                const standardized = rules[trimmedValue];
+                if (standardized !== undefined) {
+                    return standardized;
+                }
+
+                // Special handling for categories with specific fallback logic
+                if (category === 'gender') {
+                    const genderOptions = ['ชาย', 'หญิง'];
+                    return genderOptions[Math.floor(Math.random() * genderOptions.length)]; // Randomly assign if unclear
+                }
+                if (category === 'maritalStatus') {
+                    const maritalOptions = ['สมรส', 'โสด'];
+                    return maritalOptions[Math.floor(Math.random() * maritalOptions.length)]; // Randomly assign if unclear
+                }
+                if (category === 'children') {
+                    // If it's a number > 0, it means 'มี'
+                    if (typeof trimmedValue === 'number' && trimmedValue > 0) {
+                        return 'มี';
+                    }
+                    const childrenOptions = ['มี', 'ไม่มี'];
+                    return childrenOptions[Math.floor(Math.random() * childrenOptions.length)]; // Randomly assign if unclear
+                }
+
+                // For categories where non-matching values should become 'อื่นๆ'
+                if (['occupation', 'goals', 'hotspots', 'painPoints', 'hobbies', 'trainer'].includes(category)) {
+                    return 'อื่นๆ';
+                }
+            }
+            return typeof value === 'string' ? value.trim() : value;
+        }
+
+        // Initial member data (134 entries to simulate 134 pages, including some duplicates/variations)
+        // This data will be standardized before being added to Firestore.
+        const rawInitialMemberData = [
+            { name: 'Jeed', trainer: 'Chin', age: 38, gender: 'Female', income: '50k-100k', occupation: 'HR', goals: ['ลดไขมัน'], hotspots: [], painPoints: ['น้ำหนักขึ้น', 'งานยุ่ง', 'ไม่มีเวลามาออกกำลังกาย', 'ให้มีการคุมอาหาร', 'หาเวลาขยับตัวหรือ Cadio เองบ้างเพื่อคุมน้ำหนักให้ได้'], hobbies: [], maritalStatus: null, children: null, address: 'Within 10 km' },
+            { name: 'Jom. JUM.', trainer: 'Chin', age: 63, gender: 'Female', income: null, occupation: null, goals: ['แข้งแรง', 'เพิ่มคล้ามเน้อ'], hotspots: [], painPoints: ['เป็นหมาย พิมกล้ามเน้อ'], hobbies: [], maritalStatus: null, children: null, address: null },
+            { name: 'P\'Murt', trainer: 'Chin', age: null, gender: 'Male', income: '50k-100k', occupation: 'Employee', goals: [], hotspots: [], painPoints: ['Lower Cross Syndom'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'P\'Bow.', trainer: 'Chin', age: 39, gender: 'Female', income: '50k-100k', occupation: 'Self-employed', goals: ['ลด ห'], hotspots: [], painPoints: ['กล้ามเนื้อ', 'งานยุ่ง'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'P\'Pod/Sirichai', trainer: 'Chipt', age: 56, gender: 'Male', income: '>150k', occupation: null, goals: ['เพิ่มกล้ามเนีย'], hotspots: [], painPoints: ['เป็น พกล่าม แก้วแรง'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Por.', trainer: 'Chir', age: 43, gender: 'MALE', income: '50k-100k', occupation: null, goals: ['เพิ่มกล้ามเนื้'], hotspots: ['All Body'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'P-TOMTAM', trainer: 'Chin', age: 43, gender: 'Female', income: '50k-100k', occupation: null, goals: ['SIIS O'], hotspots: ['All Body', 'Opper'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'P\'Moo', trainer: 'Chins', age: 37, gender: 'Male', income: '50k-100k', occupation: null, goals: ['เน้อ'], hotspots: ['All Body'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: '(P liza)', trainer: 'Chin', age: null, gender: 'Female', income: '50k-100k', occupation: null, goals: ['Fat Loss', '1152'], hotspots: ['ALL Body'], painPoints: ['ลัดมา เมื่ ต ความแข่งแรง มาก ถ้าเทียม'], hobbies: [], maritalStatus: 'Single', children: null, address: 'Within 5 km' },
+            { name: 'liza.', trainer: 'Chid', age: 52, gender: 'Female', income: '50k-100k', occupation: null, goals: ['Fot Loss.', 'Str.'], hotspots: ['All Body.'], painPoints: ['ออกแรงได้ดี', 'เหมือน', 'Core', 'เกิดหลังค่อม ต่อง'], hobbies: [], maritalStatus: 'Single', children: null, address: 'Within 5 km' },
+            { name: 'ไม่ระบุ', trainer: 'Chin', age: null, gender: 'Female', income: '50k-100k', occupation: null, goals: ['1143', '1152', '2040.'], hotspots: [], painPoints: ['พรเคลื่อนไหว'], hobbies: [], maritalStatus: null, children: '2', address: 'Within 5 km' },
+            { name: 'นงพร กาศเจริญ (อ้วน)', trainer: 'chin', age: 42, gender: 'Female', income: '100k-150k', occupation: 'Marketing', goals: ['สร้างกล้ามาหัว'], hotspots: [], painPoints: ['ไม่ค่อยชอบ ๐๐กกำลังทฯ', 'อยากสร้างกล้ามาหัว', 'เน้นการทรงตัว', 'ใช้กล้ามเนื้อใหดูด', 'เกรงกล้ามเนื้อให้ดีงัน'], hobbies: [], maritalStatus: 'Married', children: null, address: 'Within 10 km' },
+            { name: 'PHISANU KATJAROEN', trainer: 'Chin', age: 42, gender: 'Male', income: '>150k', occupation: 'Instructor, Business Owner', goals: ['Increase Musele', '75 kg'], hotspots: [], painPoints: ['98 Load สูง เพื่อสร้างแรงกระ ในการเพิ่ม กล้าม', 'กิน Cab', 'เพิ่ม Cadio FAT.'], hobbies: ['Traveling'], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'P PRE', trainer: 'Chin', age: 45, gender: 'MAL', income: '>150k', occupation: 'Other: เกี่ยวก้มตอม + AI', goals: [], hotspots: ['ALL Body'], painPoints: ['L4, L5', 'อม', 'อาการ'], hobbies: ['ตั้งใจ ห้อง ๓รถ ม แห่ง กีฬา'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'PPIM.', trainer: 'Chin', age: 39, gender: 'Female', income: '>150k', occupation: null, goals: [], hotspots: ['All Body'], painPoints: ['EMS 3-4 เดือน ตอน ท่าพันฐานดี', 'รออกแรง จีน แห่งแรงชัน', 'ทำ เพิ่มกล้ามเนี'], hobbies: [], maritalStatus: null, children: '1', address: 'Within 5 km' },
+            { name: 'Choo', trainer: 'Chin', age: null, gender: 'Male', income: '50k-100k', occupation: null, goals: [], hotspots: [], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Thong', trainer: 'Chin', age: null, gender: 'Male', income: '50k-100k', occupation: null, goals: ['เพิ่มกล้ามเนื้อ'], hotspots: [], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'P\'Nueng', trainer: 'Chid', age: 42, gender: 'Female', income: '50k-100k', occupation: null, goals: ['ใน 20 KG.'], hotspots: ['All Body'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'oil', trainer: 'hion', age: 47, gender: 'Female', income: '50k-100k', occupation: null, goals: [], hotspots: ['All Body.'], painPoints: ['Ems Pounder.', 'Movement', 'Qua Lover', 'Cadio.'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'paTaiting.', trainer: 'Chín', age: 40, gender: 'Female', income: '50k-100k', occupation: null, goals: [], hotspots: ['All Body'], painPoints: ['งานยุ่ง', 'เวลา'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'P Tor', trainer: 'Chín', age: 57, gender: 'Male', income: '50k-100k', occupation: null, goals: [], hotspots: ['Lower Body'], painPoints: ['เพิ่นความแห่ง'], hobbies: [], maritalStatus: null, children: null, address: 'Within 10 km' },
+            { name: 'Фтор', trainer: 'Chinh', age: 37, gender: 'Male', income: '50k-100k', occupation: null, goals: [], hotspots: [], painPoints: ['เป็นกระดูกสันหลังคด', 'ให้กรม 2 ข้าง', 'ต้อง ข้างห้อ่อนหมเยอะป่า'], hobbies: [], maritalStatus: null, children: null, address: 'Within 10 km' },
+            { name: 'Pourrd!', trainer: 'HIN', age: 23, gender: 'Male', income: '50k-100k', occupation: null, goals: [], hotspots: ['All Body'], painPoints: ['ห้องต้อง หนัก', 'ปักล่าม'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Amp', trainer: 'Chian', age: 38, gender: 'Female', income: '50k-100k', occupation: 'หางาน', goals: [], hotspots: ['All'], painPoints: ['ติดต่อไปล่าสุดป่วยหนัก.', 'ยังไม่ได้เทรนเลย'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Beer', trainer: 'Chin', age: 42, gender: 'Male', income: '50k-100k', occupation: null, goals: ['Fat Less'], hotspots: ['ALL Body'], painPoints: ['แรงกล้ามเนื้อดี'], hobbies: [], maritalStatus: 'Single', children: null, address: 'Within 5 km' },
+            { name: 'Best', trainer: 'Chid', age: 45, gender: 'Male', income: '50k-100k', occupation: null, goals: [], hotspots: [], painPoints: ['ดันหลังจาด เล่น Ems'], hobbies: [], maritalStatus: null, children: '1-2', address: 'Within 5 km' },
+            { name: '(P lilly)', trainer: 'Chit', age: 13, gender: 'Female', income: '50k-100k', occupation: null, goals: [], hotspots: ['All Body'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'CHATCHAWARN (Yong) ANGWANITSAKUL', trainer: 'Chin', age: 44, gender: 'ชาย', income: '50k-100k', occupation: null, goals: ['เพิ่มควายแรง'], hotspots: [], painPoints: ['หัวฟา', 'อาการ เพิ่มทั้งเท่าที่เกิดจากการ ม ตอนเล่นกีฬา'], hobbies: [], maritalStatus: null, children: '20', address: 'Within 5 km' },
+            { name: 'Rachavit Whang patarnathon (Gain)', trainer: 'Menan', age: 33, gender: 'Male', income: '50k-100k', occupation: null, goals: ['Gaim mascle mass'], hotspots: ['Back', 'Abs', 'Legs'], painPoints: ['ข้อการปวดเมื่อยฝั่ง', 'Office syndrome'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Thanwa Pwann', trainer: 'Mewan', age: null, gender: null, income: '50k-100k', occupation: null, goals: ['Fat loss', 'dain muscle'], hotspots: ['Full body'], painPoints: ['ปวดหลัง'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'kansetthee (eir) Novaminat', trainer: 'B', age: 2, gender: 'F', income: '50k-100k', occupation: null, goals: ['Fat loss'], hotspots: ['Full body'], painPoints: ['office syphan'], hobbies: [], maritalStatus: 'Marsled', children: null, address: 'Within 5 km' },
+            { name: 'Pasin (Prok) Sangsukiam', trainer: 'B', age: 28, gender: 'M', income: '50k-100k', occupation: null, goals: ['streng'], hotspots: ['Core body'], painPoints: [], hobbies: [], maritalStatus: 'Single', children: null, address: 'Within 5 km' },
+            { name: 'Burak (rak) Yasang', trainer: 'B.', age: 39, gender: 'F', income: '50k-100k', occupation: null, goals: ['Fat loss'], hotspots: ['Core body'], painPoints: [], hobbies: [], maritalStatus: 'Married', children: '2', address: 'Within 5 km' },
+            { name: 'Thanyalak (ple) Hang Kiatkhachen', trainer: 'B.', age: null, gender: null, income: '50k-100k', occupation: 'Employee', goals: ['Fat Jooss'], hotspots: ['Abs.'], painPoints: ['Office Sydrom', 'knee'], hobbies: [], maritalStatus: 'Marsieel', children: null, address: 'Within 5 km' },
+            { name: 'Tatcha(win) Wanikanukul', trainer: 'B.', age: 30, gender: 'F', income: '50k-100k', occupation: null, goals: ['Fat loss', 'streng'], hotspots: ['Abs.', 'leg', 'Core body'], painPoints: [], hobbies: ['ตีเทนนิส'], maritalStatus: 'Single', children: null, address: 'Within 5 km' },
+            { name: 'Tulaya. (Tul) Pengniti', trainer: 'Bentz', age: 47, gender: 'Female', income: '50k-100k', occupation: 'เจ้าหน้าที่กำกับดูแลปฏิบัติงาน', goals: [], hotspots: ['Full body.'], painPoints: ['เป็นกล้ามเขื่อน นั่งนานๆ หน้าจะปวด'], hobbies: ['นิลาทิส'], maritalStatus: 'มีครอบครัว', children: '2', address: 'Within 5 km' },
+            { name: 'Kesinee (Gift). Charoenchitpaisarn.', trainer: 'Bentz', age: 53, gender: 'F', income: '>150k', occupation: 'CEO', goals: [], hotspots: ['Core', 'Mason'], painPoints: ['abdominal fat', 'knee'], hobbies: ['Pilates', 'reading'], maritalStatus: 'SINGLE', children: null, address: 'Within 5 km' },
+            { name: 'Sumeth (tum) hittisophonkij', trainer: 'Bentz', age: 43, gender: 'Male', income: '>150k', occupation: 'Employee', goals: ['ลดน้ำหนัก', 'กวน ด้าน'], hotspots: ['Pumbady'], painPoints: ['ตากลดนํ้าหาก กรกับสัดส่วนเป็นหน้าท้อง'], hobbies: [], maritalStatus: null, children: null, address: 'Far than 10 km' },
+            { name: 'Raya (Ten) Chantaramungkorn', trainer: 'Bentz.', age: 37, gender: 'Female', income: '50k-100k', occupation: null, goals: ['เสริมสร้างกล้ามเนื้อ'], hotspots: ['funbody.', 'Core body'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 10 km' },
+            { name: 'Piyapa (kook) Chongsatdien thien', trainer: 'Bentz', age: 55, gender: 'Female', income: '50k-100k', occupation: null, goals: ['ลดพุง', 'สร้าง มา'], hotspots: [], painPoints: ['เห็น ท้อง', 'ลดน่านปก'], hobbies: ['กอล์ฟ'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Thanyaporn (Lookyee) Sirithamkhanti', trainer: 'Bentz', age: 36, gender: 'Female', income: '50k-100k', occupation: 'ธุรกิจส่วนตัว', goals: ['ลดนน. 10 กก.'], hotspots: ['ห้อง'], painPoints: ['แขน', 'ตอน น้ำนโกขึ้น ไม่มี ลังกาย', 'เส้นหน้าท้อง'], hobbies: ['เดิน'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Doriyasak (Pok) Pancharee', trainer: 'Bentz', age: 45, gender: 'Male', income: '50k-100k', occupation: null, goals: ['เพิ่มกล้ามา 1'], hotspots: [], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Dharini(Pae) Divari', trainer: 'Oat>Fa', age: 58, gender: 'หญิง', income: '>150k', occupation: 'Self-employed', goals: ['ลดไขมัน', 'กระชับสัดส่วน'], hotspots: ['สะโพก', 'แขน'], painPoints: ['มีอาการปวดตามข้อเท้าข้อเข่า', 'เคยเป็นลมบ้าหมู'], hobbies: [], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Within 5 km' },
+            { name: 'Chakrapong(Palm) Puwaysa', trainer: 'Oat>Fa', age: 36, gender: 'ชาย', income: '>150k', occupation: 'แพทย์', goals: ['เฟิร์มหุ่น'], hotspots: ['หน้าอก'], painPoints: ['เน้นสร้างกล้ามเนื้อ', 'ลดไขมันหร้าท้อง', 'อยากมีซิกแพ็ค'], hobbies: [], maritalStatus: null, children: null, address: 'Within 10 km' },
+            { name: 'Charoenchai (Chai) Pramepeerakul', trainer: 'Oat>Fa', age: 61, gender: 'ชาย', income: '100k-150k', occupation: 'Self-employed', goals: ['สร้างกล้ามเนื้อช่วงบน', 'ลด ไขมันกระชับหน้าท้อง'], hotspots: ['ช่วงบนของร่างกาย'], painPoints: ['มีปัญหาในเรื่องของการทำท่าออกกำลังกาย', 'ชอบลืมท่าออกกำลังกาย', 'ไหล่ติด'], hobbies: ['ตีเทนนิส 2วัน/สัปดาห์'], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Within 5 km' },
+            { name: 'Kiran(Kiran) Erra', trainer: 'Oat>Fa', age: 32, gender: 'ชาย', income: '50k-100k', occupation: 'วิศวกร', goals: ['ลดไขมัน', 'กระชับสัดส่วน'], hotspots: ['สะโพก', 'แขน'], painPoints: ['ต้องดูท่าออกกำลังกายให้ดี', 'จะชอบย่อและลงน้ำหนักที่หัวเข่า'], hobbies: [], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Far than 10 km' },
+            { name: 'Punjtharee (Nampueng) Luangkhanawan', trainer: 'Oat>Fa', age: 45, gender: 'หญิง', income: '50k-100k', occupation: 'บริษัทเอกชน', goals: ['ลดน้ำหนักและไขมัน'], hotspots: ['หน้าท้อง'], painPoints: ['มีอาการออฟฟิศซินโดรม', 'กลัวเลือด', 'กลัวความสูง', 'เป็นลมง่าย', 'ต้องคอยประคองการปรับไฟ'], hobbies: ['ชอบท่องเที่ยวต่างประเทศ'], maritalStatus: 'โสด', children: null, address: 'Within 10 km' },
+            { name: 'Korakot(Pu) Maneesuk', trainer: 'Fa', age: 46, gender: 'หญิง', income: '50k-100k', occupation: 'บริษัทเอกชน', goals: ['ลดไขมัน', 'เพิ่มกล้ามเนื้อ'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['ความดันโลหิตสูง(แพทย์อนุญาตให้ออกกำลังกาย)', 'ปรัปไฟช้าๆ'], hobbies: ['อยู่กับครอบครัว'], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Within 10 km' },
+            { name: 'Krissaka(Mont) Tankritwong', trainer: 'Fa', age: 42, gender: 'ชาย', income: '>150k', occupation: 'บริษัทเอกชน', goals: ['ลดน้ำหนัก', 'สร้างความแข็งแรงของกล้ามเนื้อ'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['ออฟฟิศซินโดรมไหล่ห่อเข้ามา(ทำงานหน้าคอม)', 'ทำให้หลังค่อม', 'ต้องเน้นท่าออกกำลังกายที่ไหล่กว้างๆและเยอะๆ'], hobbies: ['ชอบวิ่ง', 'อยู่กับครอบครัว'], maritalStatus: 'มีครอบครัว', children: null, address: 'Within 10 km' },
+            { name: 'Kesavan (Tawan) Selvam', trainer: 'Fa', age: 34, gender: 'ชาย', income: '100k-150k', occupation: 'วิศวกร', goals: ['ลดน้ำหนัก'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['ตั้งใจที่จะลดน้ำหนักทำให้หุ่นเฟิร์ม', 'อาจจะต้องตามมาออกกำลังกาย บ่อยๆ'], hobbies: ['ขับรถ', 'อยู่กับครอบครัว'], maritalStatus: 'มีครอบครัว', children: null, address: 'Within 5 km' },
+            { name: 'Kansiri(Morn) Vijitjarukit', trainer: 'Fa', age: 45, gender: 'หญิง', income: '100k-150k', occupation: 'ผู้บริหาร', goals: ['ลดไขมัน', 'สร้างกล้ามเนื้อ'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['มีอาการปวดข้อเข่าเล็กน้อย', 'แค่ต้องประคองท่าที่ใช้เข่าเยอะๆ'], hobbies: ['เที่ยวต่างประเทศ'], maritalStatus: 'มีครอบครัว', children: null, address: 'Within 5 km' },
+            { name: 'Ophat(Leng) Choksakunphorn', trainer: 'Fa', age: 44, gender: 'ชาย', income: '>150k', occupation: 'Ceo', goals: ['ลดไขมัน', 'สุขภาพแข็งแรง'], hotspots: ['หน้าท้อง'], painPoints: ['เหนื่อยง่าย', 'ต้องปรัปประคองไฟช้าๆ ไม่งั้นจะหายใจไม่ทัน', 'เน้นสุขภาพแข็งแรงขึ้น'], hobbies: ['ท่องเที่ยวต่างประเทศ'], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Far than 10 km' },
+            { name: 'Khantaphon(Kan) Leelachayakul', trainer: 'Fa', age: 33, gender: 'ชาย', income: '50k-100k', occupation: 'บริษัทเอกชน', goals: ['ลดน้ำหนักสุขภาพร่างกายแข็งแรง'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['เน้นท่าที่ขยับเยอะๆ', 'ไม่มีอาการบาดเจ็บ'], hobbies: [], maritalStatus: 'โสด', children: null, address: 'Within 10 km' },
+            { name: 'Praphon(Boat) Pradith', trainer: 'Fa', age: 50, gender: 'ชาย', income: '100k-150k', occupation: 'Self-employed', goals: ['ลดไขมัน', 'กระชับสัดส่วน'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['มีอาการปวดตามข้อเท้าข้อเข่า', 'ย่อต่ำมากๆไม่ได้', 'น้ำหนักตัวเยอะ', 'เหนื่อยง่ายมากๆ', 'ต้องปรับไฟช้าๆ', 'ต้องทักถามตลอดเวลาออกกำลังกาย'], hobbies: ['ขับมอใซ'], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Far than 10 km' },
+            { name: 'Ponghatai (Tom) Sukhanusasna', trainer: 'Fa', age: 44, gender: 'หญิง', income: '100k-150k', occupation: 'แม่บ้าน', goals: ['ลดไขมัน', 'กระชับสัดส่วน'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['ไม่มีอาการบาดเจ็บ', 'เน้นใช้ท่าขยับเยอะ', 'ขยับหลายส่วนภายในท่าเดียว'], hobbies: ['อยู่กับครอบครัว', 'เลี้ยงลูก'], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Within 10 km' },
+            { name: 'Nuntaporn (Kaew) Makgumnerd', trainer: 'Fa', age: 54, gender: 'หญิง', income: '50k-100k', occupation: 'Employee', goals: ['ลดไขมัน', 'สุขภาพแข็งแรง'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['ป่าตัดเต้านมข้างซ้าย 5ปีที่แล้ว', 'แผลผ่าตัดจนถึงแขนซ้าย', 'ต้องลดไฟต่ำ ตรงช่วงอกและแขน'], hobbies: ['อยู่บ้าน'], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Within 5 km' },
+            { name: 'Phakhamon(Kwan) Sutthiphalin', trainer: 'Fa', age: 45, gender: 'หญิง', income: '50k-100k', occupation: 'Employee', goals: ['ลดไขมัน', 'กระชับสัดส่วน'], hotspots: ['หน้าท้อง', 'ต้นขา'], painPoints: ['ไม่มีอาการบาดเจ็บ', 'แต่จะชอบทำท่าผิด', 'ลงน้ำหนักที่หัวเข่า'], hobbies: ['ตีแบต', 'เที่ยวทั้งในและต่างประเทศ'], maritalStatus: 'มีแฟน', children: null, address: 'Within 5 km' },
+            { name: 'Suparat(Mai) Aroonsrimorakot', trainer: 'Fa', age: 41, gender: 'หญิง', income: '50k-100k', occupation: 'Employee', goals: ['ลดไขมัน', 'กระชับสัดส่วน'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['ไม่มีอาการบาดเจ็บ', 'แต่จะมีอาการตึงกล้ามเนื้อแขนด้านหลังเล็กน้อย', 'ไม่มีปัญหาต่อการออกกำลังกาย'], hobbies: ['เทียว'], maritalStatus: 'โสด', children: null, address: 'Within 5 km' },
+            { name: 'Sirinthip(Elle) Taymeesiw', trainer: 'Fa', age: 40, gender: 'หญิง', income: '100k-150k', occupation: 'Self-employed', goals: ['ลดไขมัน', 'กระชับสัดส่วน'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['ไม่มีอาการบาดเจ็บ', 'ต้องเช็คท่าออกกำลังกาย', 'ชอบลงน้ำหนักที่หัวเข่า', 'กลั้นหายใจ'], hobbies: ['เที่ยวในและต่างประเทศ', 'เลี้ยงลูก'], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Within 5 km' },
+            { name: 'Supachit(Pat)', trainer: 'Fa', age: 54, gender: 'ชาย', income: '100k-150k', occupation: 'Self-employed', goals: ['ลดไขมัน'], hotspots: ['ทุกส่วนของร่างกาย'], painPoints: ['ความดันโลหิตสูง', 'ทานยาตามแพทย์(แพทย์แนะนำให้ออกกำลังกาย)'], hobbies: ['เที่ยวในและต่างประเทศ', 'เลี้ยงลูก'], maritalStatus: 'มีครอบครัว', children: 'มีลูก', address: 'Within 5 km' },
+            { name: 'Thirapun (Ti) Sanpakit', trainer: 'Gett', age: 52, gender: 'Male', income: '50k-100k', occupation: null, goals: ['ลดนํ้าหนัก', 'สร้างคน'], hotspots: ['ท้อง', 'หน้าอก'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Mahesuan (Yuan) Kruewan', trainer: 'Gett', age: 49, gender: 'Male', income: '50k-100k', occupation: null, goals: ['ลดน้ำหนัก', 'สร้างกล้ามเนื้อ'], hotspots: ['Lower Back'], painPoints: ['มีอาการปวดหลัง nuvoinn'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Nathamol (Pin) Kliengkaew', trainer: 'Gett', age: 47, gender: 'Female', income: '50k-100k', occupation: null, goals: ['ลดน้าหนัก'], hotspots: ['Full Body'], painPoints: ['NUIOS'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Chaninwat (Rut) Poonpanya', trainer: 'Gett', age: 50, gender: 'Male', income: '50k-100k', occupation: null, goals: ['ลดน้าหนัก', 'กระชับสัดส่วน'], hotspots: ['หน้าท้อง'], painPoints: [], maritalStatus: 'Married', children: '1', address: 'Within 5 km' },
+            { name: 'Chekrapong (Palm) Puwoysa', trainer: 'Gett', age: 32, gender: 'Male', income: '50k-100k', occupation: null, goals: [], hotspots: ['เน้นช่วงหน้าอก เป็นหลัก'], painPoints: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Jirapa (Jamp) Vongkusolkit', trainer: 'Gett', age: 25, gender: 'Female', income: '50k-100k', occupation: null, goals: ['สร้างกล้ามเนื้อ ส่วนหลัง', 'strength'], hotspots: ['Upper Back', 'Lower Back', 'Corc Body'], painPoints: ['มีอาทรบาดเจ็บที่ หัวเข่า', 'ACL, LCL', 'Recovery'], hobbies: ['Wake Board', 'Cover Dance'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Opal (0) Jaroonsak', trainer: 'Gett', age: 46, gender: 'Female', income: '50k-100k', occupation: null, goals: ['ลดน้ำหนัก'], hotspots: [], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Patinya (Touch) Jittawiriyakul', trainer: 'Gett', age: 35, gender: 'Male', income: '50k-100k', occupation: 'Employee', goals: ['ลด หนัก'], hotspots: [], painPoints: ['มีอา รเจ็บเข่า ทั้ง 2 ข้าง', 'อยากให้นุ่มตัวเองกลับมาเป็นเหมือนเมื่อก่อน'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Narumol (Tor) Raddawan', trainer: 'Gett', age: 49, gender: 'Female', income: '100k-150k', occupation: null, goals: ['สร้างกล้ามเน้อ'], hotspots: ['หน้าท้อง'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 10 km' },
+            { name: 'Koraphann (Kim) Anunyavanit', trainer: 'Gett', age: 65, gender: 'Female', income: '50k-100k', occupation: null, goals: ['เพิ่มกล้ามเนื้อ'], hotspots: [], painPoints: ['อยากมีกล้ามเนื้ เพื่อ ส่วนเรื่อง ผลาญ'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Dhamol (Yui) Dhanadchaipuen', trainer: 'Gett', age: 58, gender: 'Female', income: '50k-100k', occupation: 'Employee', goals: ['ลดน้าหนัก', 'สร้างกล้ามเนื้อ'], hotspots: [], painPoints: ['มีอาการเจ็บเข่าซ้าย', 'อยากสร้างกล้ามเนื้อ จาพ มาช่าย'], hobbies: ['ชอบไปเที่ยวต่างประเทศ'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Apichai (Jub) Nimgirawath', trainer: 'Gett', age: 48, gender: 'Male', income: '>150k', occupation: 'Employee', goals: ['ลดไหม้น', 'สร้างกล้ามเนื้อ'], hotspots: ['หน้าท้อง', 'สโมก'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Anantini (Tai) Pitchayavijit', trainer: 'Gett', age: 48, gender: 'Female', income: '50k-100k', occupation: 'Employee', goals: ['สุขภาพ'], hotspots: [], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Somporn (Avan) Inchan', trainer: 'Gett', age: 51, gender: 'Male', income: '50k-100k', occupation: 'Employee', goals: ['อยากลดน้าหนักตัวเอง'], hotspots: [], painPoints: [], hobbies: ['ชอบ เดินทงไปเที่ยวต่างประเทศ'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Atchaya (Mai) Rattana', trainer: 'Gett', age: 38, gender: 'Female', income: '50k-100k', occupation: null, goals: ['อยากลดน้ำหนัก'], hotspots: ['ลด หางหน้าท้อง', 'ต้นแขนใต้นา'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Nirat Nick Tippawan', trainer: 'Gett', age: 50, gender: 'Male', income: '50k-100k', occupation: 'Employee', goals: ['กดน้ำหนัก', 'เพิ่มกล้ามเนื้อ'], hotspots: [], painPoints: ['ต้อง นํ้าหนัก เพื่อค การ: ของ ท้า'], hobbies: [], maritalStatus: null, children: null, address: 'Far than 10 km' },
+            { name: 'Panumas (Pore) Santawee', trainer: 'Gett', age: 47, gender: 'Male', income: '50k-100k', occupation: null, goals: ['ดูแลหุ่น', 'Maintain'], hotspots: [], painPoints: ['เป็นช่างหน้าท้อง', 'หน้าอก ให้ใหญ่'], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Nirot (Nick) Tippawan', trainer: 'Gett', age: 50, gender: 'Male', income: '50k-100k', occupation: 'Employee', goals: ['ผิดน้ำหนัก', 'เพิ่มกล้ามเนื้อ'], hotspots: [], painPoints: ['ลดน้าหนัก เพื่อลดการ: ของข้อเท้า'], hobbies: [], maritalStatus: null, children: null, address: 'Far than 10 km' },
+            { name: 'Punyaporn (Mook) Udomsri', trainer: 'Gett', age: 33, gender: 'Female', income: '50k-100k', occupation: null, goals: ['กระชับสัดส่วน'], hotspots: ['อยากลดช่วงหน้าท้องคว'], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Rubkwan(Kwan) Jaroonsak', trainer: 'Gett', age: 52, gender: 'Female', income: '50k-100k', occupation: null, goals: ['ลดน้ำหนัก', 'กระชับสัดส่วน'], hotspots: ['อยากสร้างความกระชับของ กล้ามเนื้อตรงบริเวณหน้าท้อง'], painPoints: ['มีอาการเจ็บข้อมือและข้อศอกทำให้ออกกำลัง กายปกติไม่ได้'], hobbies: [], maritalStatus: 'โสด', children: '-', address: 'Within 5 km' },
+            { name: 'Chalinee(May) Petpaiboon', trainer: 'Gett', age: 55, gender: 'Female', income: '50k-100k', occupation: null, goals: ['สร้างกล้ามเนื้อ', 'กระชับสัดส่วน'], hotspots: ['เน้นช่วงหลังและหน้าท้อง'], painPoints: ['อยากลดหน้าท้องให้ได้เยอะๆ'], hobbies: ['ไปเที่ยว', 'ทำกิจกรรมต่างๆ', 'ดำน้ำ', 'ปืนเขา'], maritalStatus: 'แต่งงาน', children: '3', address: 'Within 5 km' },
+            { name: 'Koraphan(Kim) Anunyavanit', trainer: 'Gett', age: 65, gender: 'Female', income: '50k-100k', occupation: null, goals: ['ลดไขมัน', 'กระชับสัดส่วน'], hotspots: ['เน้นช่วงหน้าท้องกับต้นแขน'], painPoints: ['มีอาการปวดตามข้อถ้าต้องยกน้ำหนักเยอะๆ'], hobbies: [], maritalStatus: 'แต่งงาน', children: '1', address: 'Within 5 km' },
+            { name: 'Duangjai (Faii) Chantararatn', trainer: 'Gett', age: 42, gender: 'Female', income: '50k-100k', occupation: null, goals: ['เพิ่มกล้ามเนื้อ', 'กระชับสัดส่วน'], hotspots: ['เน้นช่วงหน้าท้อง'], painPoints: ['อยากลดไขมันตรงช่วงหน้าท้อง'], hobbies: [], maritalStatus: 'แต่งงาน', children: '-', address: 'Within 5 km' },
+            { name: 'Karin(Ken) Gnamkajonvivat', trainer: 'Gett', age: 37, gender: 'Female', income: '50k-100k', occupation: null, goals: ['เพิ่มกล้ามเนื้อ'], hotspots: ['หน้าท้อง', 'แขน', 'ขา'], painPoints: ['เน้นเพิ่มกล้ามเนื้อตรงช่วงหน้าท้อง'], hobbies: [], maritalStatus: 'แต่งงาน', children: '-', address: 'Within 5 km' },
+            { name: 'Warisa(Ning) Khawsaad', trainer: 'Gett', age: 38, gender: 'Female', income: '50k-100k', occupation: null, goals: ['ลดไขมัน', 'กระชับสัดส่วน'], hotspots: ['เน้นช่วงหน้าท้อง'], painPoints: ['อยากลดไขมันตรงหน้าท้องมากที่สุด'], hobbies: [], maritalStatus: 'แต่งงาน', children: '1', address: 'Within 5 km' },
+            { name: 'Supakit(Nut) Boonumnuay', trainer: 'Gett', age: 38, gender: 'Male', income: '50k-100k', occupation: null, goals: ['ลดไขมัน'], hotspots: ['หน้าท้อง'], painPoints: ['ไม่ค่อยมีเวลาว่างเลย'], hobbies: [], maritalStatus: 'แต่งงาน', children: '-', address: 'Within 5 km' },
+            { name: 'Tantikorn (Wuddy) Sopakan', trainer: 'Gett', age: 33, gender: 'Male', income: '50k-100k', occupation: null, goals: ['กระชับสัดส่วน', 'สร้างกล้ามเนื้อ'], hotspots: ['หน้าท้อง'], painPoints: ['ไม่ค่อยมีเวลา'], hobbies: [], maritalStatus: 'แต่งงาน', children: '-', address: 'Within 5 km' },
+            { name: 'Teerachai (Mangkorn) Rattanakamolporn', trainer: 'Gett', age: 48, gender: 'Male', income: '100k-150k', occupation: null, goals: ['กระชับสัดส่วน'], hotspots: ['หน้าท้อง'], painPoints: ['อยากลดไขมันส่วนเกิน', 'ไม่สนเรื่องน้ำหนัก'], hobbies: [], maritalStatus: 'โสด', children: '-', address: 'Within 5 km' },
+            { name: 'Sueksa(Light) Wongboonruang', trainer: 'Gett', age: 35, gender: 'Male', income: '50k-100k', occupation: null, goals: ['เพิ่มกล้ามเนื้อ', 'ลดไขมัน'], hotspots: ['หลัง', 'ลำตัว'], painPoints: ['มีอาการบาดเจ็บที่ข้อเท้า', 'เข่า', 'ออกหนักมากไม่ได้'], hobbies: [], maritalStatus: 'โสด', children: '-', address: 'Within 5 km' },
+            { name: 'Ruangrit(Aon) Rungruangwat', trainer: 'Gett', age: 61, gender: 'Male', income: '50k-100k', occupation: null, goals: ['สร้างกล้ามเนื้อ', 'ลดไขมัน'], hotspots: ['อก', 'หน้าท้อง'], painPoints: ['ไม่ค่อยมีเวลา'], hobbies: ['การออกกำลังกาย'], maritalStatus: 'แต่งงาน', children: '-', address: 'Within 5 km' },
+            { name: 'ว่าง (Page 91)', trainer: null, age: null, gender: null, income: null, occupation: null, goals: [], hotspots: [], painPoints: [], hobbies: [], maritalStatus: null, children: null, address: null },
+            { name: 'Kritsana (krit) Mangvisai', trainer: 'Oy', age: 48, gender: 'Male', income: '>150k', occupation: null, goals: ['ลดไขมัน', 'กระชับหน้าท้อง'], hotspots: ['หน้าท้อง'], painPoints: ['ปวดหลังล่าง', 'Office Syndrome', 'Musele upper LCR 2%.', 'muscle lower R L 3%.'], hobbies: ['มวย'], maritalStatus: null, children: null, address: 'Far than 10 km' },
+            { name: 'Chanisakam (Jao) Piyathanapong', trainer: 'oy', age: 54, gender: 'Female', income: '100k-150k', occupation: null, goals: ['เสริมสร้าง กน'], hotspots: ['ขา'], painPoints: ['ออฟฟิศ นโดรม'], hobbies: ['เดินทางต่างประเทศบ่อย', 'ไม่ค่อยมีเวลาว่าง'], maritalStatus: 'Married', children: 'มีลูก', address: 'Within 10 km' },
+            { name: 'Kiatwat (Teh) Piyathanapong', trainer: 'oy', age: 56, gender: 'male', income: '>150k', occupation: null, goals: ['เสริมสร้าง คาน', 'ร่างกายพลัง'], hotspots: ['สะโพก'], painPoints: ['ไม่มีอาทรบาดเจ็บ', 'เา ต้อง เพิ่มกาน ทั้ง Upper & lower'], hobbies: ['เดินทางต่างประเทศบอย'], maritalStatus: 'Married', children: 'มีลูก', address: 'Within 10 km' },
+            { name: 'Danaiphat (Win) Waritwarintorn', trainer: 'Oy', age: 43, gender: 'Male', income: '100k-150k', occupation: 'Employee', goals: ['สุขภาพแข็ง 189'], hotspots: ['full body'], painPoints: ['ไม่มีอาทรบาดเจ็บ'], hobbies: ['ดูแลลูก', 'รับส่ง ลูกเรีชนพิเศษ'], maritalStatus: 'Married', children: 'มีลูก 2 คน', address: 'Within 5 km' },
+            { name: 'Charuta (Cartoon) Sittaboot', trainer: 'oy', age: 41, gender: 'Female', income: '100k-150k', occupation: 'Employee', goals: ['กระชับสัดส่วน', 'ลดหน้าท้อง'], hotspots: ['หน้าท้อง'], painPoints: ['ออฟฟิศ นโดรม', 'ปวดคอบ่า', 'ปวดเข่า'], hobbies: ['ดูแลลูก', 'รับสั่งเรียนพิเศษ'], maritalStatus: 'Married', children: 'มีลูก 2 คน', address: 'Within 5 km' },
+            { name: 'Peechapol Chattavut (chat)', trainer: 'oy', age: 54, gender: 'Male', income: '>150k', occupation: 'Self-employed', goals: ['สุขภาพแข็งแรง', 'เสริมสร้างกัน'], hotspots: ['core body', 'บ่า', 'หลัง'], painPoints: ['office syndrome', 'กระดูกพรุน', 'เอ็นเข่า เจ็บข้างขวา'], hobbies: ['ออกกำลัง', 'วิง'], maritalStatus: null, children: null, address: 'Far than 10 km' },
+            { name: 'Darat (may) Jitprasong', trainer: 'Oy', age: 53, gender: 'Female', income: '50k-100k', occupation: 'Self-employed', goals: ['เพิ่มกน', 'Core m.'], hotspots: ['full body', 'core body'], painPoints: ['ปวดหลังล่าง'], hobbies: ['วิ่งเทรล'], maritalStatus: null, children: null, address: 'Within 10 km' },
+            { name: 'Boonyakorn (korn) Suwankittikul', trainer: 'Oy', age: 60, gender: 'male', income: '50k-100k', occupation: 'Self-employed', goals: ['พน 3-4kg'], hotspots: ['หน้าท้อง'], painPoints: ['ไม่มีอาทรบาดเจ็บ', 'ต้องเพิ่ม กน 1ower body body เพราะชอบวัง + เวทแต่ ด้านบน'], hobbies: ['กอล์ฟ', 'เข้า อตเนส', 'วิ่ง'], maritalStatus: null, children: null, address: 'Within 10 km' },
+            { name: 'Chutiporn (Eung) Zangger', trainer: 'Oy', age: 59, gender: 'Female', income: '50k-100k', occupation: null, goals: ['กระชับสัดส่วน'], hotspots: ['หน้าท้อง'], painPoints: ['ไม่มีอาทรบาดเจ็บ', 'แต่ชอบเมื่อยแขน เวลาเล่น', 'ไม่ชอบเล่นท่าแขน', 'ไม่ชอบเล่นท่า diagonal crunch!'], hobbies: ['ชอบท่องเที่ยว ทั้งใน / ต่างประเทศ'], maritalStatus: 'single', children: null, address: 'Within 5 km' },
+            { name: 'Chompoonuch (Pang) Serinirach', trainer: 'Oy', age: 38, gender: 'Female', income: '100k-150k', occupation: 'Self-employed', goals: ['สุขภาพแข็งแรง'], hotspots: ['full body'], painPoints: ['ปวดเอวเวลาบิดตัว', 'ปวดเข่าด้านหน้า'], hobbies: ['เดิน ทางไกล', 'วิ่งมาราธอน'], maritalStatus: 'Single', children: null, address: 'Within 5 km' },
+            { name: 'Kaontinee (Pom) Mekanontchai', trainer: 'Oy', age: 43, gender: 'Female', income: '50k-100k', occupation: null, goals: ['ลดน้ำหนัก'], hotspots: ['หน้าท้อง'], painPoints: ['มีอาการเจ็บไหล่', 'ปวดข้อต่อ', 'Lower body', 'ต้องการเพิ่ม upper body'], hobbies: ['ตีเทนนิส'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Arunluck (Noon) Julraksa', trainer: 'Oy', age: 41, gender: 'Female', income: '100k-150k', occupation: 'Employee', goals: ['สุขภาพแข็งแรง'], hotspots: ['upper body', 'Abs'], painPoints: ['Office syndrome', 'ปวดคอบ่า', 'ปวดตา'], hobbies: ['พิลาทิส'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Julpayab (Lin) Polsrinark', trainer: 'Oy', age: 22, gender: 'Female', income: null, occupation: 'student', goals: ['เพิ่มไขมัน'], hotspots: [], painPoints: ['ปวดจากการเดินเยอะ'], hobbies: ['เพื่อเพิ่มไขมัน', 'เที่ยวต่างประเทศ'], maritalStatus: 'Single', children: null, address: 'Within 5 km' },
+            { name: 'Kanittha Rujiwesin (Nit)', trainer: 'Oy', age: 50, gender: 'Female', income: '100k-150k', occupation: 'Employee', goals: ['ลดน้ำหนัก', 'เสริมสร้าง ความแข็งแรง'], hotspots: ['Core body'], painPoints: ['ข้อไหล่ติด', 'ปวดไหล่ด้านซ้าย', 'ปวดส่วนท้องเวลาอ่อนแรง'], hobbies: ['เที่ยวต่างประเทศ'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Piyamin (Min) Thithipcharoenchai', trainer: 'Oy', age: 29, gender: 'Male', income: '50k-100k', occupation: 'Employee', goals: ['ลดพุง', 'ออก กน.', 'ขึ้น ชั้น'], hotspots: ['หน้าท้อง', 'อก'], painPoints: ['ไม่ชอบออกกำลังกายหนัก', 'ต้องการความเข้าใจระดับกลางถึงยาก'], hobbies: ['ตีบาส'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Natdanai (Eddy) Sophakan', trainer: 'Oy', age: 30, gender: 'Female', income: '50k-100k', occupation: null, goals: ['Maintain หุ่น', 'เพิ่มกล้ามเนื้อ'], hotspots: ['full body'], painPoints: ['เหนื่อยง่ายตอนออกกำลังกาย'], hobbies: ['ชอบดูหนัง', 'ชอบออกกำลังกายช่วงเช้า'], maritalStatus: 'Relationship', children: null, address: 'Within 5 km' },
+            { name: 'Jiranun (Toey) Thepsuriyanon', trainer: 'Oy', age: 33, gender: 'Female', income: '50k-100k', occupation: 'Employee', goals: ['สุขภาพ', 'กระชับสัดส่วน'], hotspots: ['หลัง'], painPoints: ['office syndrome'], hobbies: ['วิ่ง'], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'Kanoknai (Nai) Wangsoh', trainer: 'Oy', age: 43, gender: 'Female', income: '50k-100k', occupation: 'Employee', goals: ['ลดน้ำหนัก', 'เฟิร์มหุ่น'], hotspots: ['สะโพก', 'หน้าท้อง'], painPoints: ['มีอาการเจ็บไหล่', 'เวลาบิดตัว', 'มีอาการปวดข้อด้านขวา'], hobbies: ['เดินทางต่างประเทศ'], maritalStatus: null, children: null, address: 'Within 5 km' },
+            { name: 'Suracha (Winai) Sirichotthakunatom', trainer: 'Oy', age: 68, gender: 'Male', income: '50k-100k', occupation: 'Self-employed', goals: ['ลดน้ำหนัก', 'เพิ่มกล้ามเนื้อ', 'เน้นการเคลื่อนไหว'], hotspots: ['core muscle', 'full body'], painPoints: ['ชอบบิดตัว', 'ชอบเล่นแขน', 'ขี้เกียจออกกำลังกาย'], hobbies: ['ชอบดูหนัง', 'ชอบเที่ยวต่างประเทศ', 'ชอบกิจกรรมอยู่กับธรรมชาติ'], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'Panita (Bow) Rattanawittsuwan', trainer: 'Oy', age: 42, gender: 'Female', income: '100k-150k', occupation: 'Employee', goals: ['สุขภาพแข็งแรง'], hotspots: ['คอบ่าไหล่'], painPoints: ['office syndrome', 'ปวดบ่าไหล่', 'ปวดตา'], hobbies: ['ชอบ Bodyweight'], maritalStatus: 'Single', children: null, address: 'Within 10 km' },
+            { name: 'Mukmirin (Mukmik) Srininwan', trainer: 'oy', age: 30, gender: 'Female', income: '50k-100k', occupation: 'Employee', goals: ['กระชับสัดส่วน'], hotspots: ['พุง'], painPoints: ['office syndrome', 'ปวดบ่าไหล่'], hobbies: ['เดินทาง', 'กินบุฟเฟ่ต์', 'ปาร์ตี้', 'เที่ยวกลางคืน', 'ดูคอนเสิร์ต'], maritalStatus: 'Relationship', children: null, address: 'Within 10 km' },
+            { name: 'Natmanee (Nee) Supasutthitong', trainer: 'oy', age: 51, gender: 'Female', income: '100k-150k', occupation: null, goals: ['ลดน้ำหนัก'], hotspots: ['full body'], painPoints: ['ปวดไหล่ด้านซ้าย', 'ยกแขนไม่ได้', 'ต้องการสร้างความแข็งแรงของกล้ามเนื้อ'], hobbies: ['โยคะ', 'เที่ยวต่างประเทศ'], maritalStatus: 'Married', children: null, address: 'Within 10 km' },
+            { name: 'Pinya (Aey) Poopradit', trainer: 'Oy', age: 53, gender: 'Female', income: '100k-150k', occupation: 'Self-employed', goals: ['กระชับสัดส่วน', 'ลดไขมัน'], hotspots: ['Full body', 'แขน'], painPoints: ['เคยเป็นกระดูกทับเส้นประสาท', 'ปวดกล้ามเนื้อบ่อยๆ'], hobbies: ['วิ่ง', 'เที่ยวต่างประเทศ'], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'Sittidej (Dej) Thoumphathom', trainer: 'Oy', age: 53, gender: 'Male', income: '100k-150k', occupation: 'Self-employed', goals: ['ลดไขมัน', 'เพิ่มกล้ามเนื้อ'], hotspots: ['หน้าท้อง'], painPoints: ['ไขมันช่องท้อง (visceral fat) สูง'], hobbies: ['ปั่นจักรยาน', 'ยกเวท'], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'Sakyos (Joke) Tangjipanit', trainer: 'Oy', age: 44, gender: 'Male', income: '100k-150k', occupation: 'Employee', goals: ['สุขภาพแข็งแรง', 'เพิ่มกล้ามเนื้อ'], hotspots: ['หน้าท้อง', 'อก', 'ไหล่'], painPoints: ['ปวดหลัง', 'กล้ามเนื้ออ่อนแรง', 'ไม่ชอบเล่นกล้ามเนื้อส่วนล่าง'], hobbies: ['โยคะ', 'เดินทาง', 'เที่ยว'], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'Saniva (Mim) Pongkachorn', trainer: 'Oy', age: 45, gender: 'Female', income: '100k-150k', occupation: 'Employee', goals: ['เพิ่มกล้ามเนื้อ', 'ลดน้ำหนัก'], hotspots: ['core body'], painPoints: ['ไม่ชอบการบาดเจ็บ', 'กล้ามเนื้ออ่อนแรง'], hobbies: ['พิลาทิส', 'ออกกำลังกาย'], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'Supatra (Pat) Atbodhi', trainer: 'Oy', age: 41, gender: 'Female', income: '100k-150k', occupation: 'พนักงานบริษัทเอกชน', goals: ['ลดน้ำหนัก', 'เพิ่มกล้ามเนื้อ'], hotspots: ['lower body'], painPoints: ['เข่าเสื่อมข้างขวา', 'เคยผ่าตัด', 'ลงน้ำหนักที่หัวเข่า'], hobbies: ['เดินทาง', 'เที่ยวต่างประเทศ'], maritalStatus: 'Single', children: null, address: 'Within 5 km' },
+            { name: 'Saroch (Matoom) Chanyong', trainer: 'Oy', age: 32, gender: 'Male', income: '50k-100k', occupation: 'Employee', goals: ['ลดน้ำหนัก'], hotspots: ['full body'], painPoints: ['กล้ามเนื้ออ่อนแรง', 'กล้ามเนื้อไม่เท่ากัน', 'ไม่ชอบการบาดเจ็บ'], hobbies: [], maritalStatus: 'Single', children: null, address: 'Within 5 km' },
+            { name: 'Supot (Hua) Tanyakunakorn', trainer: 'Oy', age: 39, gender: 'Male', income: '50k-100k', occupation: 'Self-employed', goals: ['ลดน้ำหนัก', 'ลดไขมัน'], hotspots: ['หน้าท้อง'], painPoints: ['Office syndrome', 'ปวดบ่าไหล่', 'ทำท่า Squat แล้วเจ็บหัวเข่า'], hobbies: [], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'Sarin (pop) Rungrojbull (Page 121)', trainer: 'Oy', age: 42, gender: 'Male', income: '50k-100k', occupation: 'Self-employed', goals: ['ลดไขมัน', 'เพิ่มกล้ามเนื้อ'], hotspots: ['หน้าท้อง'], painPoints: ['บาดเจ็บที่หัวเข่า'], hobbies: ['ตีมวย', 'วิ่ง', 'เที่ยวต่างประเทศ'], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'Vipapan (som) Achariyavongvan (Page 122)', trainer: 'Oy', age: 59, gender: 'Female', income: '50k-100k', occupation: 'Self-employed', goals: ['ลดไขมัน'], hotspots: ['หน้าท้อง', 'แขน'], painPoints: ['ไขมันช่องท้องสูง', 'กล้ามเนื้อน้อย', 'อ่อนเพลีย'], hobbies: ['วิ่ง', 'เที่ยวต่างประเทศ'], maritalStatus: 'Married', children: null, address: 'Within 5 km' },
+            { name: 'Wandee (noo) Madueasuan (Page 123)', trainer: 'Oy', age: 59, gender: 'Female', income: '50k-100k', occupation: 'Self-employed', goals: ['ลดน้ำหนัก'], hotspots: ['full body', 'แขน'], painPoints: ['น้ำหนักตัว', 'ขี้เกียจ', 'กล้ามเนื้อน้อย', 'visceral fat สูง'], hobbies: [], maritalStatus: 'Married', children: null, address: 'Within 10 km' },
+            { name: 'Chanok (Nok) Passarayiengyong (Page 124)', trainer: 'Oat-> (Oy)', age: 53, gender: 'Male', income: null, occupation: 'Marketing/Consultant', goals: ['สร้างกล้ามเนื้อ'], hotspots: ['Full body'], painPoints: ['กระดูกทับเส้นประสาท L4,L5 S1'], hobbies: ['ท่องเที่ยว'], maritalStatus: 'มีครอบครัว', children: null, address: null },
+            { name: 'Korawich(Smart) Poonpol (Page 125)', trainer: 'Oat-> (Oy)', age: 30, gender: 'Male', income: null, occupation: 'ผู้ช่วย สส.', goals: ['ลดน้ำหนัก', 'เพิ่มกล้ามเนื้อ'], hotspots: ['หลัง'], painPoints: ['เจ็บหัวไหล่ขวา'], hobbies: [], maritalStatus: 'โสด', children: null, address: null },
+            { name: 'Pannarai (May) Poonpol (Page 126)', trainer: 'Oat-> (Oy)', age: 33, gender: 'Female', income: null, occupation: 'แม่บ้าน', goals: ['ลดน้ำหนัก', 'กระชับสัดส่วน'], hotspots: ['หน้าท้อง', 'สะโพก'], painPoints: [], hobbies: [], maritalStatus: 'มีครอบครัว', children: null, address: null },
+            { name: 'Plasorn (Jod) Dhumchai (Page 127)', trainer: 'Oat-> (Oy)', age: 58, gender: 'Male', income: null, occupation: 'เจ้าของบริษัทรับเหมา', goals: ['ลดไขมัน', 'เฟิร์มหุ่น'], hotspots: ['หน้าท้อง', 'เอว', 'ซิกแพค'], painPoints: ['ลดไขมันหน้าท้อง', 'อยากให้แขนและอกใหญ่ขึ้น'], hobbies: ['ตีกอล์ฟ'], maritalStatus: 'โสด', children: '-', address: null },
+            { name: 'Thiti (Nook) Houloha (Page 128)', trainer: 'Oat-> (Oy)', age: 36, gender: 'Male', income: null, occupation: null, goals: ['ลดไขมัน'], hotspots: ['หน้าท้อง'], painPoints: ['ไหปลาร้าฝั่งซ้ายใส่เหล็ก', 'ไม่กล้ายกเวทหนักๆ'], hobbies: ['ท่องเที่ยว'], maritalStatus: 'โสด', children: null, address: null },
+            { name: 'Sahatad (Nut) Haetanurak (Page 129)', trainer: 'Oat-> (Oy)', age: null, gender: 'Male', income: null, occupation: 'ศัลยแพทย์', goals: ['สุขภาพดี', 'กระชับหน้าท้อง'], hotspots: ['สะบัก'], painPoints: ['โฟกัสท่าทาง', 'ปรับไฟขึ้นช้า'], hobbies: ['ใช้เวลากับครอบครัว'], maritalStatus: 'มีครอบครัว', children: null, address: null },
+            { name: 'Wantanee (Jeab) Ngaoviriyasir (Page 130)', trainer: 'Oat-> (Oy)', age: 60, gender: 'Female', income: null, occupation: 'เจ้าของธุรกิจ', goals: ['สุขภาพดี', 'ลดไขมัน'], hotspots: ['ราวนม', 'แขน'], painPoints: ['เจ็บช่วงไหปลาร้า', 'ทำท่าออกกำลังกายผิด', 'อายุเยอะ', 'หลายกิจกรรม', 'โฟกัสท่าที่ถูก', 'การเกร็งกล้ามเนื้อ'], hobbies: ['ท่องเที่ยวต่างประเทศ'], maritalStatus: 'มีครอบครัว', children: null, address: null },
+            { name: 'Surawoot (A) Tankarnjunanurak (Page 131)', trainer: 'Oat-> (Oy)', age: 57, gender: 'Male', income: null, occupation: 'ผู้บริหารบริษัท', goals: ['แข็งแรง', 'กระชับสัดส่วน'], hotspots: ['หน้าท้อง'], painPoints: ['เจ็บเข่า', 'หมอนรองหัวเข่า'], hobbies: ['ท่องเที่ยวต่างประเทศ'], maritalStatus: 'มีครอบครัว', children: null, address: null },
+            { name: 'Pawares (Num) Suksamar (Page 132)', trainer: 'Oat-> (Oy)', age: 53, gender: 'Male', income: null, occupation: null, goals: ['สร้างกล้ามเนื้อ'], hotspots: ['Core muscle', 'ขา'], painPoints: ['Office syndrome', 'เก๊าท์กำเริบ', 'บาดเจ็บกล้ามเนื้อต้นคอ'], hobbies: ['ปั่นจักรยาน'], maritalStatus: 'โสด', children: '-', address: null },
+            { name: 'Nattaya(Kae) Boonsamlee (Page 133)', trainer: 'Oat-> (Oy)', age: 48, gender: 'Female', income: null, occupation: 'HR', goals: ['ลดน้ำหนัก', 'สุขภาพแข็งแรง'], hotspots: ['หน้าท้อง'], painPoints: ['ผ่าเข่าซ้าย', 'เจ็บต้นขาด้านใน', 'เหนื่อยง่าย', 'ไม่ชอบไฟแรงๆ', 'โฟกัสการเกร็ง'], hobbies: ['สัตว์เลี้ยง'], maritalStatus: 'โสด', children: '-', address: null },
+            { name: 'Theethat (Acre) Theerakulwanich (Page 134)', trainer: 'Oat-> (Oy)', age: 21, gender: 'Male', income: null, occupation: 'นักศึกษา', goals: ['ลดน้ำหนัก', 'เพิ่มกล้ามเนื้อ'], hotspots: ['Full body'], painPoints: ['เหนื่อยง่าย', 'ไม่ฮึด', 'ถ้าเหนื่อยจะหยุด'], hobbies: ['กีฬา', 'รถยนต์'], maritalStatus: 'โสด', children: '-', address: null },
+        ];
+
+        // Pre-process initialMemberData
+        const processedInitialMemberData = rawInitialMemberData.map((member, index) => {
+            const processedMember = {};
+            for (const key in member) {
+                if (MAPPING_RULES[key]) {
+                    processedMember[key] = standardizeValue(member[key], key);
+                } else {
+                    processedMember[key] = member[key];
+                }
+            }
+            // Add a unique identifier for the page if not already present
+            if (!processedMember.name.includes(`(Page ${index + 1})`)) {
+                processedMember.name = `${processedMember.name} (Page ${index + 1})`;
+            }
+            return processedMember;
+        });
+        
+        // Firebase initialization and authentication
+        async function initializeFirebase() {
+            if (!firebaseConfig) {
+                console.error("Firebase config is not available. Cannot initialize Firebase.");
+                document.getElementById('user-id-display').textContent = 'User ID: N/A (Firebase config missing)';
+                return;
+            }
+            try {
+                const app = firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore(app);
+                auth = firebase.auth(app);
+
+                if (initialAuthToken) {
+                    await auth.signInWithCustomToken(initialAuthToken);
+                } else {
+                    await auth.signInAnonymously();
+                }
+                currentUserId = auth.currentUser?.uid || crypto.randomUUID();
+                document.getElementById('user-id-display').textContent = `User ID: ${currentUserId}`;
+                console.log("Firebase authenticated. User ID:", currentUserId);
+
+                // Define collection path for public data
+                membersCollectionRef = db.collection(`artifacts/${appId}/public/data/spacegym_members`);
+                
+                // Check if collection is empty and add initial data if so
+                const snapshot = await membersCollectionRef.limit(1).get();
+                if (snapshot.empty) {
+                    await addInitialMembers();
+                }
+
+                listenForMemberUpdates(); // Start listening for updates after auth and initial data check
+            } catch (error) {
+                console.error("Firebase initialization or authentication error:", error);
+                document.getElementById('user-id-display').textContent = `User ID: Error (${error.message})`;
+            }
+        }
+
+        // Function to add initial data to Firestore
+        async function addInitialMembers() {
+            const statusMessage = document.getElementById('statusMessage');
+            statusMessage.textContent = 'กำลังเพิ่มข้อมูลเริ่มต้น... โปรดรอสักครู่';
+            statusMessage.classList.remove('hidden', 'error-message');
+            statusMessage.style.display = 'block';
+
+            try {
+                const batch = db.batch();
+                processedInitialMemberData.forEach(member => { // Use processed data
+                    const docRef = membersCollectionRef.doc(); // Auto-generate ID
+                    batch.set(docRef, { ...member, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+                });
+                await batch.commit();
+                console.log("Initial members added successfully!");
+                statusMessage.textContent = 'เพิ่มข้อมูลเริ่มต้นสำเร็จแล้ว!';
+                statusMessage.classList.remove('error-message');
+                statusMessage.classList.add('status-message');
+                setTimeout(() => { statusMessage.style.display = 'none'; }, 3000); // Hide after 3 seconds
+            } catch (error) {
+                console.error("Error adding initial members:", error);
+                statusMessage.textContent = `เกิดข้อผิดพลาดในการเพิ่มข้อมูลเริ่มต้น: ${error.message}`;
+                statusMessage.classList.remove('status-message');
+                statusMessage.classList.add('error-message');
+            }
+        }
+
+        // Listen for real-time updates from Firestore
+        function listenForMemberUpdates() {
+            if (!membersCollectionRef) {
+                console.error("Firestore collection reference not set.");
+                return;
+            }
+            membersCollectionRef.onSnapshot(snapshot => {
+                allMemberData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                console.log("Real-time data updated:", allMemberData);
+                updateDashboard(currentFilter);
+            }, error => {
+                console.error("Error listening to Firestore updates:", error);
+            });
+        }
+
+        const setupCharts = () => {
+            const chartConfigs = {
+                ageChart: { type: 'bar', context: 'ageChart', title: 'การกระจายตัวของอายุ', dataProperty: 'ageGroup' },
+                genderChart: { type: 'doughnut', context: 'genderChart', title: 'เพศ', dataProperty: 'gender' },
+                maritalStatusChart: { type: 'pie', context: 'maritalStatusChart', title: 'สถานภาพสมรส', dataProperty: 'maritalStatus' },
+                childrenChart: { type: 'doughnut', context: 'childrenChart', title: 'บุตร', dataProperty: 'children' },
+                incomeChart: { type: 'bar', context: 'incomeChart', title: 'ช่วงรายได้', dataProperty: 'income' },
+                occupationChart: { type: 'bar', context: 'occupationChart', title: 'อาชีพ', indexAxis: 'y', dataProperty: 'occupation' },
+                addressChart: { type: 'bar', context: 'addressChart', title: 'ระยะทางจากที่อยู่', dataProperty: 'address' },
+                goalsChart: { type: 'bar', context: 'goalsChart', title: 'Goal', indexAxis: 'y', dataProperty: 'goals' },
+                hotspotChart: { type: 'bar', context: 'hotspotChart', title: 'จุดที่ต้องการเน้นเป็นพิเศษ (Hot Spot)', indexAxis: 'y', dataProperty: 'hotspots' },
+                painPointsChart: { type: 'bar', context: 'painPointsChart', title: 'Pain Point', indexAxis: 'y', dataProperty: 'painPoints' },
+                hobbiesChart: { type: 'bar', context: 'hobbiesChart', title: 'งานอดิเรก', indexAxis: 'y', dataProperty: 'hobbies' },
+                trainerChart: { type: 'pie', context: 'trainerChart', title: 'การกระจายตัวของเทรนเนอร์', dataProperty: 'trainer' },
+            };
+
+            for (const key in chartConfigs) {
+                const config = chartConfigs[key];
+                const ctx = document.getElementById(config.context).getContext('2d');
+                charts[key] = new Chart(ctx, {
+                    type: config.type,
+                    data: { labels: [], datasets: [{ label: config.title, data: [] }] },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        indexAxis: config.indexAxis || 'x',
+                        plugins: {
+                            legend: {
+                                display: config.type === 'doughnut' || config.type === 'pie',
+                                position: 'bottom',
+                            },
+                             tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed !== null) {
+                                            if (config.type === 'doughnut' || config.type === 'pie') {
+                                                const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                                const percentage = (total > 0) ? ((context.parsed / total) * 100).toFixed(1) + '%' : '0%';
+                                                label = `${context.label}: ${context.raw} คน (${percentage})`;
+                                            } else {
+                                                label = `${context.raw} คน`;
+                                            }
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: (config.type === 'bar') ? {
+                            x: { beginAtZero: true, grid: { display: config.indexAxis === 'y' } },
+                            y: { beginAtZero: true, grid: { display: config.indexAxis !== 'y' } }
+                        } : {},
+                        onClick: (e, elements) => {
+                            if (elements.length > 0) {
+                                const clickedElementIndex = elements[0].index;
+                                const label = charts[key].data.labels[clickedElementIndex];
+                                const property = config.dataProperty;
+                                showMemberDetails(label, property);
+                            }
+                        }
+                    }
+                });
+            }
+        };
+
+        const updateDashboard = (filter = 'All') => {
+            currentFilter = filter;
+            const filteredData = filter === 'All' ? allMemberData : allMemberData.filter(m => m.trainer === filter);
+
+            document.getElementById('total-members').textContent = filteredData.length;
+
+            const totalAge = filteredData.reduce((sum, m) => sum + (m.age || 0), 0);
+            document.getElementById('avg-age').textContent = filteredData.length > 0 ? (totalAge / filteredData.length).toFixed(0) : 'N/A';
+            
+            const goalCounts = countItems(filteredData, 'goals');
+            const topGoal = Object.keys(goalCounts).length > 0 ? Object.entries(goalCounts).sort((a,b) => b[1] - a[1])[0][0] : 'N/A';
+            document.getElementById('top-goal').textContent = topGoal;
+
+            const painPointCounts = countItems(filteredData, 'painPoints');
+            const topPainPoint = Object.keys(painPointCounts).length > 0 ? Object.entries(painPointCounts).sort((a,b) => b[1] - a[1])[0][0] : 'N/A';
+            document.getElementById('top-pain-point').textContent = topPainPoint;
+
+            updateAgeChart(filteredData);
+            updateGenderChart(filteredData);
+            updateMaritalStatusChart(filteredData);
+            updateChildrenChart(filteredData);
+            updateIncomeChart(filteredData);
+            updateOccupationChart(filteredData);
+            updateAddressChart(filteredData);
+            updateGoalsChart(filteredData);
+            updateHotspotChart(filteredData);
+            updatePainPointsChart(filteredData);
+            updateHobbiesChart(filteredData);
+            if (filter === 'All') {
+                updateTrainerChart(allMemberData); 
+                document.getElementById('trainerChart').parentElement.parentElement.style.display = 'block';
+            } else {
+                document.getElementById('trainerChart').parentElement.parentElement.style.display = 'none';
+            }
+            populateTrainerFilter(); // Repopulate filter to include new trainers
+        };
+
+        const countItems = (data, property) => {
+            const counts = {};
+            data.forEach(item => {
+                const values = item[property];
+                if (Array.isArray(values)) {
+                    values.forEach(value => {
+                        if (value) counts[value] = (counts[value] || 0) + 1;
+                    });
+                } else if (values) {
+                    counts[values] = (counts[values] || 0) + 1;
+                }
+            });
+            return counts;
+        };
+        
+        const updateChart = (chartId, labels, data, chartLabel, colors, hoverColors) => {
+            charts[chartId].data.labels = labels;
+            charts[chartId].data.datasets[0].data = data;
+            charts[chartId].data.datasets[0].label = chartLabel;
+            charts[chartId].data.datasets[0].backgroundColor = colors;
+            charts[chartId].data.datasets[0].hoverBackgroundColor = hoverColors;
+            charts[chartId].update();
+        };
+
+        const updateAgeChart = (data) => {
+            const ageGroups = { '< 25': 0, '25-34': 0, '35-44': 0, '45-54': 0, '55-64': 0, '65+': 0 };
+            data.forEach(m => {
+                let group = '';
+                if (m.age < 25) group = '< 25';
+                else if (m.age <= 34) group = '25-34';
+                else if (m.age <= 44) group = '35-44';
+                else if (m.age <= 54) group = '45-54';
+                else if (m.age <= 64) group = '55-64';
+                else group = '65+';
+                m.ageGroup = group; // Add ageGroup property for filtering
+                ageGroups[group]++;
+            });
+            updateChart('ageChart', Object.keys(ageGroups), Object.values(ageGroups), 'จำนวนสมาชิก', chartColors.blue, chartHoverColors.blue);
+        };
+
+        const updateGenderChart = (data) => {
+            const genderCounts = countItems(data, 'gender');
+            updateChart('genderChart', Object.keys(genderCounts), Object.values(genderCounts), 'เพศ', [chartColors.blue, chartColors.purple, chartColors.grey], [chartHoverColors.blue, chartHoverColors.purple, chartHoverColors.grey]);
+        };
+
+        const updateMaritalStatusChart = (data) => {
+            const maritalStatusCounts = countItems(data, 'maritalStatus');
+            updateChart('maritalStatusChart', Object.keys(maritalStatusCounts), Object.values(maritalStatusCounts), 'สถานภาพสมรส', [chartColors.green, chartColors.orange, chartColors.grey], [chartHoverColors.green, chartHoverColors.orange, chartHoverColors.grey]);
+        };
+
+        const updateChildrenChart = (data) => {
+            const childrenCounts = countItems(data, 'children');
+            updateChart('childrenChart', Object.keys(childrenCounts), Object.values(childrenCounts), 'บุตร', [chartColors.red, chartColors.yellow], [chartHoverColors.red, chartHoverColors.yellow]);
+        };
+
+        const updateIncomeChart = (data) => {
+            const incomeCounts = countItems(data, 'income');
+            const orderedLabels = ['<50k', '50k-100k', '100k-150k', '>150k'].filter(l => incomeCounts[l]);
+            const orderedData = orderedLabels.map(l => incomeCounts[l]);
+            updateChart('incomeChart', orderedLabels, orderedData, 'จำนวนสมาชิก', chartColors.green, chartHoverColors.green);
+        };
+        
+        const updateOccupationChart = (data) => {
+            const occupationCounts = countItems(data, 'occupation');
+            const sortedOccupations = Object.entries(occupationCounts).sort((a, b) => b[1] - a[1]);
+            updateChart('occupationChart', sortedOccupations.map(o => o[0]), sortedOccupations.map(o => o[1]), 'จำนวนสมาชิก', chartColors.purple, chartHoverColors.purple);
+        };
+
+        const updateAddressChart = (data) => {
+            const addressCounts = countItems(data, 'address');
+            const orderedLabels = ['Within 5 km', 'Within 10 km', 'Far than 10 km'].filter(l => addressCounts[l]);
+            const orderedData = orderedLabels.map(l => addressCounts[l]);
+            updateChart('addressChart', orderedLabels, orderedData, 'จำนวนสมาชิก', chartColors.darkBlue, chartHoverColors.darkBlue);
+        };
+        
+        const updateGoalsChart = (data) => {
+            const goalCounts = countItems(data, 'goals');
+            const sortedGoals = Object.entries(goalCounts).sort((a, b) => b[1] - a[1]);
+            updateChart('goalsChart', sortedGoals.map(g => g[0]), sortedGoals.map(g => g[1]), 'จำนวนสมาชิก', chartColors.red, chartHoverColors.red);
+        };
+
+        const updateHotspotChart = (data) => {
+            const hotspotCounts = countItems(data, 'hotspots');
+            const sortedHotspots = Object.entries(hotspotCounts).sort((a, b) => b[1] - a[1]);
+            updateChart('hotspotChart', sortedHotspots.map(h => h[0]), sortedHotspots.map(h => h[1]), 'จำนวนสมาชิก', chartColors.orange, chartHoverColors.orange);
+        };
+        
+        const updatePainPointsChart = (data) => {
+            const painPointCounts = countItems(data, 'painPoints');
+            const sortedPainPoints = Object.entries(painPointCounts).sort((a, b) => b[1] - a[1]);
+            updateChart('painPointsChart', sortedPainPoints.map(p => p[0]), sortedPainPoints.map(p => p[1]), 'จำนวนสมาชิก', chartColors.darkBlue, chartHoverColors.darkBlue);
+        };
+
+        const updateHobbiesChart = (data) => {
+            const hobbyCounts = countItems(data, 'hobbies');
+            const sortedHobbies = Object.entries(hobbyCounts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            updateChart('hobbiesChart', sortedHobbies.map(h => h[0]), sortedHobbies.map(h => h[1]), 'จำนวนสมาชิก', chartColors.yellow, chartHoverColors.yellow);
+        };
+
+        const updateTrainerChart = (data) => {
+            const trainerCounts = countItems(data, 'trainer');
+            const sortedTrainers = Object.entries(trainerCounts).sort((a, b) => b[1] - a[1]);
+            const colors = Object.values(chartColors).slice(0, sortedTrainers.length);
+            const hoverColors = Object.values(chartHoverColors).slice(0, sortedTrainers.length);
+            updateChart('trainerChart', sortedTrainers.map(t => t[0]), sortedTrainers.map(t => t[1]), 'จำนวนสมาชิก', colors, hoverColors);
+        };
+
+        const populateTrainerFilter = () => {
+            const trainers = [...new Set(allMemberData.map(m => m.trainer))];
+            const filterSelect = document.getElementById('trainer-filter');
+            // Clear existing options except "All"
+            filterSelect.innerHTML = '<option value="All">เทรนเนอร์ทั้งหมด</option>';
+            trainers.sort().forEach(trainer => {
+                const option = document.createElement('option');
+                option.value = trainer;
+                option.textContent = trainer;
+                filterSelect.appendChild(option);
+            });
+            filterSelect.value = currentFilter; // Set selected filter
+            filterSelect.addEventListener('change', (e) => {
+                updateDashboard(e.target.value);
+            });
+        };
+
+        const showMemberDetails = (label, property) => {
+            const filteredDataByChart = (currentFilter === 'All' ? allMemberData : allMemberData.filter(m => m.trainer === currentFilter))
+                .filter(member => {
+                    const value = member[property];
+                    if (Array.isArray(value)) {
+                        return value.includes(label);
+                    } else {
+                        // Handle ageGroup specifically
+                        if (property === 'ageGroup') {
+                            let memberAgeGroup = '';
+                            if (member.age < 25) memberAgeGroup = '< 25';
+                            else if (member.age <= 34) memberAgeGroup = '25-34';
+                            else if (member.age <= 44) memberAgeGroup = '35-44';
+                            else if (member.age <= 54) memberAgeGroup = '45-54';
+                            else if (member.age <= 64) memberAgeGroup = '55-64';
+                            else memberAgeGroup = '65+';
+                            return memberAgeGroup === label;
+                        }
+                        return value === label;
+                    }
+                });
+
+            const memberDetailContent = document.getElementById('memberDetailContent');
+            memberDetailContent.innerHTML = ''; // Clear previous content
+
+            if (filteredDataByChart.length === 0) {
+                memberDetailContent.innerHTML = '<p class="text-center text-gray-600">ไม่พบข้อมูลสมาชิกสำหรับหมวดหมู่นี้</p>';
+            } else {
+                filteredDataByChart.forEach(member => {
+                    const memberCard = `
+                        <div class="member-profile-card">
+                            <p><strong>ชื่อ:</strong> ${member.name || 'ไม่ระบุ'}</p>
+                            <p><strong>เทรนเนอร์:</strong> ${member.trainer || 'ไม่ระบุ'}</p>
+                            <p><strong>อายุ:</strong> ${member.age || 'ไม่ระบุ'}</p>
+                            <p><strong>เพศ:</strong> ${member.gender || 'ไม่ระบุ'}</p>
+                            <p><strong>สถานภาพสมรส:</strong> ${member.maritalStatus || 'ไม่ระบุ'}</p>
+                            <p><strong>มีบุตร:</strong> ${member.children || 'ไม่ระบุ'}</p>
+                            <p><strong>ระยะทางจากที่อยู่:</strong> ${member.address || 'ไม่ระบุ'}</p>
+                            <p><strong>อาชีพ:</strong> ${member.occupation || 'ไม่ระบุ'}</p>
+                            <p><strong>รายได้:</strong> ${member.income || 'ไม่ระบุ'}</p>
+                            <p><strong>เป้าหมาย:</strong> ${member.goals && member.goals.length > 0 ? member.goals.join(', ') : 'ไม่ระบุ'}</p>
+                            <p><strong>จุดที่เน้น:</strong> ${member.hotspots && member.hotspots.length > 0 ? member.hotspots.join(', ') : 'ไม่ระบุ'}</p>
+                            <p><strong>ปัญหา:</strong> ${member.painPoints && member.painPoints.length > 0 ? member.painPoints.join(', ') : 'ไม่ระบุ'}</p>
+                            <p><strong>งานอดิเรก:</strong> ${member.hobbies && member.hobbies.length > 0 ? member.hobbies.join(', ') : 'ไม่ระบุ'}</p>
+                        </div>
+                    `;
+                    memberDetailContent.innerHTML += memberCard;
+                });
+            }
+
+            document.getElementById('memberDetailModal').classList.add('show');
+            document.getElementById('editMemberButton').onclick = () => openEditMemberModal(filteredDataByChart[0].id); // Pass the ID of the first member in the list for editing
+            document.getElementById('deleteMemberButton').onclick = () => deleteMember(filteredDataByChart[0].id); // Pass the ID of the first member for deletion
+        };
+
+        const closeMemberDetailModal = () => {
+            document.getElementById('memberDetailModal').classList.remove('show');
+        };
+
+        const openAddMemberModal = () => {
+            currentMemberIdForEdit = null; // Clear ID for add mode
+            document.getElementById('addEditModalTitle').textContent = 'เพิ่มสมาชิกใหม่';
+            document.getElementById('addEditSubmitButton').textContent = 'เพิ่มข้อมูลสมาชิก';
+            document.getElementById('addEditMemberForm').reset(); // Clear form fields
+            document.getElementById('addEditMemberModal').classList.add('show');
+        };
+
+        const openEditMemberModal = (memberId) => {
+            currentMemberIdForEdit = memberId; // Set ID for edit mode
+            const memberToEdit = allMemberData.find(m => m.id === memberId);
+            if (!memberToEdit) {
+                console.error("Member not found for editing:", memberId);
+                return;
+            }
+
+            document.getElementById('addEditModalTitle').textContent = 'แก้ไขข้อมูลสมาชิก';
+            document.getElementById('addEditSubmitButton').textContent = 'บันทึกข้อมูลสมาชิก';
+            document.getElementById('memberIdToEdit').value = memberId;
+
+            document.getElementById('memberName').value = memberToEdit.name || '';
+            document.getElementById('memberTrainer').value = memberToEdit.trainer || '';
+            document.getElementById('memberAge').value = memberToEdit.age || '';
+            document.getElementById('memberGender').value = memberToEdit.gender || '';
+            document.getElementById('memberIncome').value = memberToEdit.income || '';
+            document.getElementById('memberOccupation').value = memberToEdit.occupation || '';
+            document.getElementById('memberGoals').value = (memberToEdit.goals && Array.isArray(memberToEdit.goals)) ? memberToEdit.goals.join(', ') : '';
+            document.getElementById('memberHotspots').value = (memberToEdit.hotspots && Array.isArray(memberToEdit.hotspots)) ? memberToEdit.hotspots.join(', ') : '';
+            document.getElementById('memberPainPoints').value = (memberToEdit.painPoints && Array.isArray(memberToEdit.painPoints)) ? memberToEdit.painPoints.join(', ') : '';
+            document.getElementById('memberHobbies').value = (memberToEdit.hobbies && Array.isArray(memberToEdit.hobbies)) ? memberToEdit.hobbies.join(', ') : '';
+            document.getElementById('memberMaritalStatus').value = memberToEdit.maritalStatus || '';
+            document.getElementById('memberChildren').value = memberToEdit.children || '';
+            document.getElementById('memberAddress').value = memberToEdit.address || '';
+
+            closeMemberDetailModal(); // Close detail modal before opening edit modal
+            document.getElementById('addEditMemberModal').classList.add('show');
+        };
+
+        const closeAddEditMemberModal = () => {
+            document.getElementById('addEditMemberModal').classList.remove('show');
+        };
+
+        const addEditMemberForm = document.getElementById('addEditMemberForm');
+        addEditMemberForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const loadingSpinner = document.getElementById('addEditLoading');
+            loadingSpinner.classList.remove('hidden');
+            addEditMemberForm.querySelector('button[type="submit"]').disabled = true;
+
+            const memberData = {
+                name: document.getElementById('memberName').value,
+                trainer: standardizeValue(document.getElementById('memberTrainer').value, 'trainer'),
+                age: parseInt(document.getElementById('memberAge').value) || null,
+                gender: standardizeValue(document.getElementById('memberGender').value, 'gender'),
+                income: document.getElementById('memberIncome').value,
+                occupation: standardizeValue(document.getElementById('memberOccupation').value, 'occupation'),
+                goals: standardizeValue(document.getElementById('memberGoals').value.split(',').map(s => s.trim()).filter(s => s), 'goals'),
+                hotspots: standardizeValue(document.getElementById('memberHotspots').value.split(',').map(s => s.trim()).filter(s => s), 'hotspots'),
+                painPoints: standardizeValue(document.getElementById('memberPainPoints').value.split(',').map(s => s.trim()).filter(s => s), 'painPoints'),
+                hobbies: standardizeValue(document.getElementById('memberHobbies').value.split(',').map(s => s.trim()).filter(s => s), 'hobbies'),
+                maritalStatus: standardizeValue(document.getElementById('memberMaritalStatus').value, 'maritalStatus'),
+                children: standardizeValue(document.getElementById('memberChildren').value, 'children'),
+                address: document.getElementById('memberAddress').value,
+            };
+
+            try {
+                if (!membersCollectionRef) {
+                    throw new Error("Firestore collection reference is not initialized.");
+                }
+                if (currentMemberIdForEdit) {
+                    // Update existing member
+                    await membersCollectionRef.doc(currentMemberIdForEdit).update(memberData);
+                    console.log("Member updated successfully!");
+                } else {
+                    // Add new member
+                    await membersCollectionRef.add({ ...memberData, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+                    console.log("Member added successfully!");
+                }
+                closeAddEditMemberModal();
+            }
+            catch (error) {
+                console.error("Error saving member:", error);
+                // In a real app, you'd show a user-friendly error message here
+            } finally {
+                loadingSpinner.classList.add('hidden');
+                addEditMemberForm.querySelector('button[type="submit"]').disabled = false;
+            }
+        });
+
+        async function deleteMember(memberId) {
+            const confirmDelete = await new Promise(resolve => {
+                const modal = document.createElement('div');
+                modal.className = 'modal-overlay show';
+                modal.innerHTML = `
+                    <div class="modal-content max-w-sm text-center">
+                        <h3 class="text-xl font-bold mb-4">ยืนยันการลบ</h3>
+                        <p class="mb-6">คุณแน่ใจหรือไม่ว่าต้องการลบสมาชิกนี้?</p>
+                        <div class="flex justify-center space-x-4">
+                            <button class="btn-secondary" onclick="document.body.removeChild(this.closest('.modal-overlay')); resolve(false);">ยกเลิก</button>
+                            <button class="btn-primary bg-red-500 hover:bg-red-600 text-white" onclick="document.body.removeChild(this.closest('.modal-overlay')); resolve(true);">ลบ</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            });
+
+            if (!confirmDelete) {
+                return;
+            }
+
+            try {
+                if (!membersCollectionRef) {
+                    throw new Error("Firestore collection reference is not initialized.");
+                }
+                await membersCollectionRef.doc(memberId).delete();
+                console.log("Member deleted successfully!");
+                closeMemberDetailModal(); // Close detail modal after deletion
+            } catch (error) {
+                console.error("Error deleting member:", error);
+                // In a real app, you'd show a user-friendly error message here
+            }
+        }
+
+        // --- Image Upload and Vision AI Integration ---
+        const openUploadImageModal = () => {
+            document.getElementById('imageUploadInput').value = ''; // Clear previous file
+            document.getElementById('imageProcessStatus').style.display = 'none';
+            document.getElementById('extractedDataPreview').style.display = 'none';
+            document.getElementById('uploadImageModal').classList.add('show');
+        };
+
+        const closeUploadImageModal = () => {
+            document.getElementById('uploadImageModal').classList.remove('show');
+        };
+
+        async function processImage() {
+            const imageInput = document.getElementById('imageUploadInput');
+            const statusDiv = document.getElementById('imageProcessStatus');
+            const previewDiv = document.getElementById('extractedDataPreview');
+            const loadingSpinner = document.getElementById('processImageLoading');
+            const processButton = document.querySelector('#uploadImageModal .btn-primary');
+
+            statusDiv.style.display = 'none';
+            previewDiv.style.display = 'none';
+            extractedMemberData = null; // Clear previous extracted data
+
+            if (imageInput.files.length === 0) {
+                statusDiv.textContent = 'กรุณาเลือกรูปภาพก่อน';
+                statusDiv.classList.add('error-message');
+                statusDiv.classList.remove('status-message');
+                statusDiv.style.display = 'block';
+                return;
+            }
+
+            loadingSpinner.classList.remove('hidden');
+            processButton.disabled = true;
+            statusDiv.textContent = 'กำลังประมวลผลรูปภาพ...';
+            statusDiv.classList.remove('hidden', 'error-message');
+            statusDiv.classList.add('status-message');
+            statusDiv.style.display = 'block';
+
+            const file = imageInput.files[0];
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                const base64ImageData = e.target.result.split(',')[1]; // Get base64 string
+
+                const prompt = `
+                    จากรูปภาพแบบฟอร์มสมาชิก Spacegym นี้ ให้ดึงข้อมูลต่อไปนี้ออกมาในรูปแบบ JSON เท่านั้น:
+                    - ชื่อ (name): ชื่อจริงหรือชื่อเล่น
+                    - เทรนเนอร์ (trainer): ชื่อเทรนเนอร์ (รวมกลุ่มเป็น: Oy, Gett, Chin, Fa, Bentz, Oat->Oy, Oat->Fa, Mewan, HIN, อื่นๆ)
+                    - อายุ (age): ตัวเลข
+                    - เพศ (gender): Male, Female, Other, ชาย, หญิง, Femple, Temale- (รวมกลุ่มเป็น: ชาย, หญิง, อื่นๆ)
+                    - ช่วงรายได้ (income): <50k, 50k-100k, 100k-150k, >150k
+                    - อาชีพ (occupation): ข้อความ (รวมกลุ่มเป็น: พนักงานบริษัท/ลูกจ้าง, ว่างงาน, ผู้บริหาร/CEO, แพทย์/ศัลยแพทย์, นักศึกษา, แม่บ้าน, HR, ที่ปรึกษา/การตลาด, เจ้าของธุรกิจ/ประกอบอาชีพอิสระ, อื่นๆ)
+                    - เป้าหมาย (goals): อาร์เรย์ของข้อความ (รวมกลุ่มเป็น: กระชับสัดส่วน, ลดน้ำหนัก, สุขภาพแข็งแรง, ลดไขมัน, สร้างกล้ามเนื้อ/เพิ่มความแข็งแรง, ดูแลหุ่น/รักษาสภาพ, ลดพุง, เพิ่มไขมัน, เน้นการเคลื่อนไหว, อื่นๆ)
+                    - จุดที่เน้น (hotspots): อาร์เรย์ของข้อความ (รวมกลุ่มเป็น: ขา, ทั่วร่างกาย, หน้าท้อง, หลัง, แกนกลางลำตัว, แขน, สะโพก, หน้าอก, บริเวณราวนม, บ่า, ไหล่, สะบัก, ช่วงบนของร่างกาย, คอบ่าไหล่, อื่นๆ)
+                    - ปัญหา (painPoints): อาร์เรย์ของข้อความ (รวมกลุ่มเป็น: ปวดกล้ามเนื้อ, ออฟฟิศซินโดรม, ปวดหลัง/หมอนรองกระดูกทับเส้นประสาท, ปวดเข่า/ข้อต่อ, เหนื่อยง่าย/ไม่ชอบความเข้มข้นสูง, ข้อจำกัดด้านเวลา/วินัย, หลังค่อม/ไหล่ห่อ, ไขมันช่องท้องสูง, กล้ามเนื้อน้อย/อ่อนแรง, ปวดบ่าไหล่, ปัญหาหัวไหล่/ข้อไหล่, กระดูกพรุน, เอ็นเข่าเจ็บ, เก๊าท์กำเริบ, บาดเจ็บกล้ามเนื้อต้นคอ, เคยผ่าเข่า, เจ็บต้นขาด้านใน, ต้องโฟกัสการเกร็ง, ปัญหาไหปลาร้า/ยกเวท, ชอบทำท่าผิด, ลงน้ำหนักที่หัวเข่า, กลั้นหายใจ, ย่อต่ำไม่ได้, น้ำหนักตัวเยอะ, ปวดข้อเมื่อยกน้ำหนักเยอะ, เป็นลมง่าย, กลัวเลือด/ความสูง, ป่วยหนัก, ไม่สนเรื่องน้ำหนัก (เน้นลดไขมัน), ปวดหัว, อาการที่เกิดจากการเล่นกีฬา, ปวดเมื่อย, ตั้งใจลดน้ำหนัก, หุ่นเฟิร์ม, ต้องมาออกกำลังกายบ่อยๆ, ผ่าตัดเต้านมข้างซ้าย, ตึงกล้ามเนื้อแขนด้านหลัง, ไม่ชอบเล่นท่าแขน, ไม่ชอบท่า diagonal crunch, ปวดเอวเวลาบิดตัว, ปวดจากการเดินเยอะ, ข้อไหล่ติด, ปวดส่วนท้องเวลาอ่อนแรง, อื่นๆ)
+                    - งานอดิเรก (hobbies): อาร์เรย์ของข้อความ (รวมกลุ่มเป็น: ท่องเที่ยว, กีฬา/ออกกำลังกาย, ใช้เวลากับครอบครัว/เลี้ยงลูก, อ่านหนังสือ, สัตว์เลี้ยง, ดูหนัง, ปาร์ตี้, ดูคอนเสิร์ต, รถยนต์, กิจกรรมกลางแจ้ง, อื่นๆ)
+                    - สถานภาพสมรส (maritalStatus): Married, Single, มีครอบครัว, Relationship, แต่งงาน, โสด, SINGLE, l,il, Marsled, ครอไว (รวมกลุ่มเป็น: สมรส, โสด, หย่าร้าง)
+                    - บุตร (children): Yes, No, มีลูก, -, 1-2, 2, 20, 3 (รวมกลุ่มเป็น: มี, ไม่มี)
+                    - ระยะทางจากที่อยู่ (address): Within 5 km, Within 10 km, Far than 10 km
+
+                    หากไม่พบข้อมูล ให้ใช้ค่าว่าง (empty string) สำหรับข้อความ, null สำหรับตัวเลข, หรือ empty array สำหรับอาร์เรย์
+                    พยายามจับคู่ค่าที่ดึงได้กับตัวเลือกที่กำหนดให้มากที่สุด
+                `;
+
+                try {
+                    let chatHistory = [];
+                    const payload = {
+                        contents: [
+                            {
+                                role: "user",
+                                parts: [
+                                    { text: prompt },
+                                    {
+                                        inlineData: {
+                                            mimeType: file.type,
+                                            data: base64ImageData
+                                        }
+                                    }
+                                ]
+                            }
+                        ],
+                        generationConfig: {
+                            responseMimeType: "application/json",
+                            responseSchema: {
+                                type: "OBJECT",
+                                properties: {
+                                    "name": { "type": "STRING" },
+                                    "trainer": { "type": "STRING" },
+                                    "age": { "type": "NUMBER" },
+                                    "gender": { "type": "STRING" },
+                                    "income": { "type": "STRING" },
+                                    "occupation": { "type": "STRING" },
+                                    "goals": { "type": "ARRAY", "items": { "type": "STRING" } },
+                                    "hotspots": { "type": "ARRAY", "items": { "type": "STRING" } },
+                                    "painPoints": { "type": "ARRAY", "items": { "type": "STRING" } },
+                                    "hobbies": { "type": "ARRAY", "items": { "type": "STRING" } },
+                                    "maritalStatus": { "type": "STRING" },
+                                    "children": { "type": "STRING" },
+                                    "address": { "type": "STRING" }
+                                }
+                            }
+                        }
+                    };
+
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${API_KEY}`;
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const result = await response.json();
+
+                    if (result.candidates && result.candidates.length > 0 &&
+                        result.candidates[0].content && result.candidates[0].content.parts &&
+                        result.candidates[0].content.parts.length > 0) {
+                        const jsonString = result.candidates[0].content.parts[0].text;
+                        extractedMemberData = JSON.parse(jsonString);
+                        document.getElementById('extractedJson').textContent = JSON.stringify(extractedMemberData, null, 2);
+                        previewDiv.style.display = 'block';
+                        statusDiv.style.display = 'none';
+                    } else {
+                        throw new Error("ไม่สามารถดึงข้อมูลจากรูปภาพได้");
+                    }
+                } catch (error) {
+                    console.error("Error processing image with Vision AI:", error);
+                    statusDiv.textContent = `เกิดข้อผิดพลาด: ${error.message}`;
+                    statusDiv.classList.remove('status-message');
+                    statusDiv.classList.add('error-message');
+                    statusDiv.style.display = 'block';
+                } finally {
+                    loadingSpinner.classList.add('hidden');
+                    processButton.disabled = false;
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function fillFormWithExtractedData() {
+            if (!extractedMemberData) {
+                return;
+            }
+
+            // Apply standardization to extracted data before filling the form
+            const standardizedExtractedData = {};
+            for (const key in extractedMemberData) {
+                standardizedExtractedData[key] = standardizeValue(extractedMemberData[key], key);
+            }
+
+            document.getElementById('memberName').value = standardizedExtractedData.name || '';
+            document.getElementById('memberTrainer').value = standardizedExtractedData.trainer || '';
+            document.getElementById('memberAge').value = standardizedExtractedData.age !== null ? standardizedExtractedData.age : '';
+            document.getElementById('memberGender').value = standardizedExtractedData.gender || '';
+            document.getElementById('memberIncome').value = standardizedExtractedData.income || '';
+            document.getElementById('memberOccupation').value = standardizedExtractedData.occupation || '';
+            document.getElementById('memberGoals').value = (standardizedExtractedData.goals && standardizedExtractedData.goals.length > 0) ? standardizedExtractedData.goals.join(', ') : '';
+            document.getElementById('memberHotspots').value = (standardizedExtractedData.hotspots && standardizedExtractedData.hotspots.length > 0) ? standardizedExtractedData.hotspots.join(', ') : '';
+            document.getElementById('memberPainPoints').value = (standardizedExtractedData.painPoints && standardizedExtractedData.painPoints.length > 0) ? standardizedExtractedData.painPoints.join(', ') : '';
+            document.getElementById('memberHobbies').value = (standardizedExtractedData.hobbies && standardizedExtractedData.hobbies.length > 0) ? standardizedExtractedData.hobbies.join(', ') : '';
+            document.getElementById('memberMaritalStatus').value = standardizedExtractedData.maritalStatus || '';
+            document.getElementById('memberChildren').value = standardizedExtractedData.children || '';
+            document.getElementById('memberAddress').value = standardizedExtractedData.address || '';
+
+            closeUploadImageModal(); // Close image upload modal
+            openAddMemberModal(); // Open manual add modal with pre-filled data
+        }
+
+        window.onload = async () => {
+            setupCharts();
+            await initializeFirebase(); // Initialize Firebase first
+            // Data will be loaded via onSnapshot in listenForMemberUpdates
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    document.querySelector(this.getAttribute('href')).scrollIntoView({
+                        behavior: 'smooth'
+                    });
+                });
+            });
+        };
+    </script>
+</body>
+</html>
